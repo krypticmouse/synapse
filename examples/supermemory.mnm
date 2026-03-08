@@ -1,0 +1,225 @@
+# supermemory.mnm
+# Universal Memory Layer with Profiles and Connectors
+
+config {
+  storage: sqlite("./supermemory.db")
+  vector: qdrant("localhost:6333")
+  graph: neo4j("bolt://localhost:7687")
+  embedding: openai("text-embedding-3-small")
+  extractor: openai("gpt-4o")
+}
+
+namespace supermemory {
+
+  # === MEMORY TYPES ===
+  
+  # Atomic facts extracted from conversations
+  memory MemoryFact {
+    content: string
+    user_id: string
+    container: string       # Scope: "user", "project", "org"
+    source_type: string     # "conversation", "document", "connector"
+    source_id: string?
+    confidence: float[0,1]
+    document_date: timestamp?  # When content was authored
+    created_at: timestamp
+    accessed_at: timestamp
+    
+    @index user_id
+    @index container
+    @index source_type
+  }
+
+  # User profile: stable facts + dynamic context
+  memory UserProfile {
+    user_id: string
+    preferences: string[]
+    expertise: string[]
+    recent_topics: string[]
+    summary: string
+    last_updated: timestamp
+    
+    @index user_id
+  }
+
+  # Chunks from documents/connectors
+  memory DocumentChunk {
+    content: string
+    document_id: string
+    document_type: string   # "pdf", "notion", "gdrive", "github"
+    chunk_index: int
+    metadata: string        # JSON
+    
+    @index document_id
+  }
+
+  # Connector sync state
+  memory ConnectorState {
+    connector_type: string  # "notion", "gdrive", "github"
+    user_id: string
+    last_sync: timestamp
+    cursor: string?
+    
+    @index connector_type
+    @index user_id
+  }
+
+  # === EXTERNAL FUNCTIONS ===
+
+  @extern
+  fn sync_connector(connector_type: string, user_id: string): DocumentChunk[]
+
+  @extern
+  fn process_document(content: string, doc_type: string): DocumentChunk[]
+
+  # === HANDLERS ===
+
+  # On conversation message, extract and store
+  on message(user_id: string, content: string, container: string) {
+    content
+      |> extract()
+      |> map(f => MemoryFact {
+        content: f.content,
+        user_id: user_id,
+        container: container,
+        source_type: "conversation",
+        confidence: f.confidence,
+        created_at: now(),
+        accessed_at: now()
+      })
+      |> store()
+  }
+
+  # Explicit save request from user
+  on save_memory(user_id: string, content: string, container: string) {
+    store(MemoryFact {
+      content: content,
+      user_id: user_id,
+      container: container,
+      source_type: "explicit",
+      confidence: 1.0,
+      created_at: now(),
+      accessed_at: now()
+    })
+  }
+
+  # Document upload
+  on document_upload(user_id: string, content: string, doc_type: string, doc_id: string) {
+    content
+      |> process_document(doc_type)
+      |> map(chunk => DocumentChunk {
+        content: chunk.content,
+        document_id: doc_id,
+        document_type: doc_type,
+        chunk_index: chunk.index,
+        metadata: chunk.metadata
+      })
+      |> store()
+  }
+
+  # Connector sync webhook
+  on connector_sync(connector_type: string, user_id: string) {
+    let chunks = sync_connector(connector_type, user_id)
+    chunks |> store()
+    
+    # Update sync state
+    store(ConnectorState {
+      connector_type: connector_type,
+      user_id: user_id,
+      last_sync: now()
+    })
+  }
+
+  # === QUERIES ===
+
+  # Main search: combines memory + RAG
+  query Search(query: string, user_id: string, container: string?): MemoryFact[] {
+    from MemoryFact, DocumentChunk
+    where semantic_match(query, threshold: 0.6)
+      and user_id == user_id
+      and (container == null or container == container)
+    order by confidence * 0.4 + relevance * 0.4 + recency * 0.2 desc
+    limit 15
+  }
+
+  # Get user profile for context injection
+  query GetProfile(user_id: string): UserProfile? {
+    from UserProfile
+    where user_id == user_id
+    limit 1
+  }
+
+  # Search with temporal awareness
+  query TemporalSearch(query: string, user_id: string, as_of: timestamp?): MemoryFact[] {
+    from MemoryFact
+    where semantic_match(query, threshold: 0.6)
+      and user_id == user_id
+      and (as_of == null or document_date <= as_of)
+    order by document_date desc
+    limit 10
+  }
+
+  # Pattern matching for structured queries
+  query FindByPattern(pattern: string, user_id: string): MemoryFact[] {
+    from MemoryFact
+    where regex(content, pattern)
+      and user_id == user_id
+    limit 20
+  }
+
+  # === UPDATE RULES ===
+
+  update MemoryFact {
+    on_access {
+      accessed_at = now()
+    }
+
+    on_conflict(old, new) {
+      # Supermemory's disambiguation: newer document_date wins
+      if new.document_date > old.document_date {
+        supersede(old, new)
+      } else if new.confidence > old.confidence + 0.2 {
+        supersede(old, new)
+      } else {
+        discard(new)
+      }
+    }
+
+    # Automatic forgetting for low-value memories
+    every 24h {
+      if confidence < 0.3 and accessed_at < now() - 30d {
+        delete()
+      }
+    }
+  }
+
+  update UserProfile {
+    # Rebuild profile from facts periodically
+    every 6h {
+      let facts = from MemoryFact
+        where user_id == user_id
+        order by confidence desc
+        limit 100
+      
+      preferences = facts |> extract_preferences()
+      expertise = facts |> extract_expertise()
+      recent_topics = facts 
+        |> filter(f => f.created_at > now() - 7d)
+        |> extract_topics()
+      summary = facts |> summarize()
+      last_updated = now()
+    }
+  }
+
+  # === POLICIES ===
+
+  # Scheduled connector syncs
+  policy ConnectorRefresh {
+    every 1h {
+      from ConnectorState
+      where last_sync < now() - 1h
+      |> each(state => emit("connector_sync", state.connector_type, state.user_id))
+    }
+  }
+
+}

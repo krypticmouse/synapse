@@ -1,0 +1,85 @@
+# agent_facts.mnm — Agent fact memory with confidence decay
+#
+# Stores facts about a user with confidence scores.
+# Facts decay over time and get deleted when confidence drops too low.
+# Contradictions are resolved by keeping the higher-confidence fact.
+#
+# Usage:
+#   synapse apply examples/agent_facts.mnm
+#
+#   # Store a fact
+#   synapse emit learn '{"content": "User prefers dark mode", "source": "stated"}'
+#
+#   # Store a high-confidence fact
+#   synapse emit learn '{"content": "User is a Python developer", "source": "inferred"}'
+#
+#   # Query relevant facts
+#   synapse query GetFacts '{"limit_n": 10}'
+#
+#   # Query by source
+#   synapse query BySource '{"source": "stated"}'
+
+config {
+    storage: sqlite("./data/agent_facts.db")
+}
+
+memory Fact {
+    content: string
+    source: string
+    confidence: float[0.0,1.0]
+    created_at: timestamp
+    accessed_at: timestamp
+}
+
+# Learn a new fact from an event
+on learn(content: string, source: string) {
+    let conf = 0.8
+    if source == "stated" {
+        conf = 1.0
+    }
+
+    store(Fact {
+        content: content,
+        source: source,
+        confidence: conf,
+        created_at: now(),
+        accessed_at: now()
+    })
+}
+
+# Get all facts ordered by confidence
+query GetFacts(limit_n: int): Fact[] {
+    from Fact
+    order by confidence desc
+    limit limit_n
+}
+
+# Get facts from a specific source
+query BySource(source: string): Fact[] {
+    from Fact
+    where source == source
+    order by created_at desc
+}
+
+# Contradiction resolution: higher confidence wins
+update Fact {
+    on_access {
+        accessed_at = now()
+    }
+
+    on_conflict(old, new) {
+        if new.confidence > old.confidence {
+            supersede(old, new)
+        } else {
+            discard(new)
+        }
+    }
+
+    # Daily decay: reduce confidence by 5%
+    every 24h {
+        confidence = confidence * 0.95
+        if confidence < 0.1 {
+            delete()
+        }
+    }
+}

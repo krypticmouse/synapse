@@ -1,0 +1,134 @@
+# zep_memory.mnm
+# Temporal Knowledge Graph Memory System
+
+config {
+  storage: sqlite("./zep.db")
+  vector: qdrant("localhost:6333")
+  graph: neo4j("bolt://localhost:7687")
+  embedding: openai("text-embedding-3-small")
+  extractor: openai("gpt-4o")
+}
+
+namespace zep_agent {
+
+  # === EPISODIC MEMORY ===
+  # Stores distinct events/interactions
+  memory Episode {
+    session_id: string
+    messages: string[]
+    summary: string?
+    created_at: timestamp
+    
+    @index session_id
+  }
+
+  # === SEMANTIC MEMORY ===
+  # Stores facts with temporal validity
+  memory Fact {
+    content: string
+    subject: string
+    predicate: string
+    object: string
+    confidence: float[0,1]
+    valid_from: timestamp
+    valid_until: timestamp?
+    superseded_by: string?
+    
+    @index subject
+    @index predicate
+    @invariant valid_from <= valid_until or valid_until == null
+  }
+
+  # === ENTITY MEMORY ===
+  # Stores entity summaries derived from facts
+  memory Entity {
+    name: string
+    entity_type: string
+    summary: string
+    fact_count: int
+    last_updated: timestamp
+    
+    @index name
+    @index entity_type
+  }
+
+  # === HANDLERS ===
+  
+  # When conversation ends, extract episodes and facts
+  on conversation_end(session_id: string, messages: Message[]) {
+    # Store as episode
+    let episode = Episode {
+      session_id: session_id,
+      messages: messages |> map(m => m.content),
+      summary: messages |> summarize(),
+      created_at: now()
+    }
+    store(episode)
+    
+    # Extract facts and build graph
+    messages
+      |> extract()
+      |> store()  # Auto-routes: facts -> sqlite, embeddings -> qdrant, triplets -> neo4j
+  }
+
+  # === QUERIES ===
+  
+  # Hybrid retrieval: vector + graph
+  query GetContext(input: string, user_id: string): Fact[] {
+    from Fact
+    where semantic_match(input, threshold: 0.6)
+      and graph_match(input, hops: 2)
+      and valid_until == null  # Only current facts
+    order by confidence desc
+    limit 20
+  }
+
+  # Get entity timeline
+  query EntityHistory(entity_name: string): Fact[] {
+    from Fact
+    where subject == entity_name or object == entity_name
+    order by valid_from asc
+  }
+
+  # Cypher for complex graph queries
+  query RelatedEntities(entity: string): Entity[] {
+    from Entity
+    where cypher("
+      MATCH (e:Entity {name: $entity})-[r*1..2]-(related:Entity)
+      RETURN DISTINCT related.name as name
+    ")
+    limit 10
+  }
+
+  # === UPDATE RULES ===
+  
+  update Fact {
+    on_access {
+      # Track access for relevance scoring
+      accessed_at = now()
+    }
+
+    on_conflict(old, new) {
+      # Temporal superseding: mark old as invalid, link to new
+      if new.valid_from > old.valid_from {
+        old.valid_until = new.valid_from
+        old.superseded_by = new.id
+        store(new)
+      } else {
+        discard(new)
+      }
+    }
+
+    # No decay - facts persist but get superseded
+  }
+
+  update Entity {
+    every 6h {
+      # Regenerate summaries from current facts
+      let facts = query_facts(name)
+      summary = facts |> summarize()
+      fact_count = facts |> len()
+      last_updated = now()
+    }
+  }
+}

@@ -1,0 +1,89 @@
+# user_profile.mnm — User profile with preferences and access tracking
+#
+# Tracks user preferences, expertise, and interaction patterns.
+# Demonstrates multiple memories, update rules, and varied queries.
+#
+# Usage:
+#   synapse apply examples/user_profile.mnm --port 9090
+#
+#   # Record a preference
+#   synapse emit set_preference '{"user_id": "u1", "key": "theme", "value": "dark"}'
+#   synapse emit set_preference '{"user_id": "u1", "key": "language", "value": "python"}'
+#
+#   # Record an interaction
+#   synapse emit interaction '{"user_id": "u1", "topic": "machine learning", "sentiment": 0.9}'
+#
+#   # Query user preferences
+#   synapse query GetPreferences '{"user_id": "u1"}'
+#
+#   # Query interactions
+#   synapse query TopTopics '{"user_id": "u1"}'
+
+config {
+    storage: sqlite("./data/profiles.db")
+}
+
+# User preference key-value store
+memory Preference {
+    user_id: string
+    key: string
+    value: string
+    updated_at: timestamp
+}
+
+# User interaction log
+memory Interaction {
+    user_id: string
+    topic: string
+    sentiment: float[0.0,1.0]
+    created_at: timestamp
+}
+
+# Set or update a user preference
+on set_preference(user_id: string, key: string, value: string) {
+    store(Preference {
+        user_id: user_id,
+        key: key,
+        value: value,
+        updated_at: now()
+    })
+}
+
+# Log a user interaction
+on interaction(user_id: string, topic: string, sentiment: float) {
+    store(Interaction {
+        user_id: user_id,
+        topic: topic,
+        sentiment: sentiment,
+        created_at: now()
+    })
+}
+
+# Get all preferences for a user
+query GetPreferences(user_id: string): Preference[] {
+    from Preference
+    where user_id == user_id
+    order by updated_at desc
+}
+
+# Get a specific preference
+query GetPreference(user_id: string, key: string): Preference[] {
+    from Preference
+    where user_id == user_id
+    limit 1
+}
+
+# Get top interaction topics for a user
+query TopTopics(user_id: string): Interaction[] {
+    from Interaction
+    where user_id == user_id
+    order by sentiment desc
+    limit 10
+}
+
+# Preferences auto-update on conflict (newer wins)
+update Preference {
+    on_conflict(old, new) {
+        supersede(old, new)
+    }
+}

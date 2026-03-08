@@ -1,0 +1,168 @@
+# letta_memory.mnm
+# Tiered Memory System with Self-Editing
+
+config {
+  storage: sqlite("./letta.db")
+  vector: qdrant("localhost:6333")
+  graph: none  # Letta doesn't use KG
+  embedding: openai("text-embedding-3-small")
+  extractor: openai("gpt-4o")
+}
+
+namespace letta_agent {
+
+  # === CORE MEMORY ===
+  # Always in context, limited size, self-editable
+  memory CoreBlock {
+    label: string           # "persona", "human", "system"
+    content: string
+    char_limit: int
+    
+    @index label
+    @invariant content.length <= char_limit
+  }
+
+  # === RECALL MEMORY ===
+  # Searchable conversation history
+  memory ConversationMessage {
+    role: string            # "user", "assistant", "system"
+    content: string
+    session_id: string
+    timestamp: timestamp
+    
+    @index session_id
+    @index timestamp
+  }
+
+  # === ARCHIVAL MEMORY ===
+  # Long-term factual storage
+  memory ArchivalEntry {
+    content: string
+    source: string          # "user_stated", "inferred", "external"
+    importance: float[0,1]
+    created_at: timestamp
+    accessed_at: timestamp
+    access_count: int
+    
+    @index importance
+  }
+
+  # === EXTERNAL FUNCTIONS ===
+  # Letta allows agent to edit its own memory via tools
+  
+  @extern
+  fn core_memory_replace(label: string, old_content: string, new_content: string): bool
+
+  @extern
+  fn core_memory_append(label: string, content: string): bool
+
+  @extern
+  fn archival_memory_insert(content: string): bool
+
+  @extern
+  fn archival_memory_search(query: string, limit: int): ArchivalEntry[]
+
+  # === HANDLERS ===
+
+  # Store every message for recall
+  on message_received(role: string, content: string, session_id: string) {
+    store(ConversationMessage {
+      role: role,
+      content: content,
+      session_id: session_id,
+      timestamp: now()
+    })
+  }
+
+  # When agent decides to archive something
+  on archive_request(content: string, source: string) {
+    store(ArchivalEntry {
+      content: content,
+      source: source,
+      importance: 0.5,  # Default, agent can update
+      created_at: now(),
+      accessed_at: now(),
+      access_count: 0
+    })
+  }
+
+  # === QUERIES ===
+
+  # Get core memory blocks for context injection
+  query GetCoreMemory(): CoreBlock[] {
+    from CoreBlock
+    order by label asc
+  }
+
+  # Search recall memory (recent conversations)
+  query SearchRecall(query: string, session_id: string?): ConversationMessage[] {
+    from ConversationMessage
+    where semantic_match(query, threshold: 0.5)
+      and (session_id == null or session_id == session_id)
+    order by timestamp desc
+    limit 50
+  }
+
+  # Search archival memory
+  query SearchArchival(query: string): ArchivalEntry[] {
+    from ArchivalEntry
+    where semantic_match(query, threshold: 0.6)
+    order by importance * 0.5 + recency * 0.5 desc
+    limit 20
+  }
+
+  # Get recent conversation for context
+  query RecentMessages(session_id: string, count: int): ConversationMessage[] {
+    from ConversationMessage
+    where session_id == session_id
+    order by timestamp desc
+    limit count
+  }
+
+  # === UPDATE RULES ===
+
+  update ArchivalEntry {
+    on_access {
+      accessed_at = now()
+      access_count = access_count + 1
+      # Boost importance based on access
+      importance = min(importance + 0.05, 1.0)
+    }
+
+    on_conflict(old, new) {
+      # Merge similar entries
+      if semantic_match(old.content, new.content, threshold: 0.9) {
+        old.content = new.content  # Take newer version
+        old.importance = max(old.importance, new.importance)
+        discard(new)
+      } else {
+        store(new)
+      }
+    }
+
+    every 24h {
+      # Decay importance for unaccessed entries
+      if accessed_at < now() - 7d {
+        importance = importance * 0.9
+      }
+      
+      # Archive very old, low-importance entries
+      if importance < 0.1 and accessed_at < now() - 30d {
+        archive()
+      }
+    }
+  }
+
+  update ConversationMessage {
+    # Summarize old conversations to save space
+    every 7d {
+      from ConversationMessage
+      where timestamp < now() - 30d
+      |> group_by(session_id)
+      |> summarize()
+      |> store_as(ArchivalEntry)
+      |> delete_originals()
+    }
+  }
+
+}

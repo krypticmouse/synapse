@@ -1,0 +1,46 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/synapse-core",
+    "crates/synapse-runtime",
+    "crates/synapse-cli",
+    "crates/synapse-sdk",
+    "crates/synapse-python",
+]
+
+[workspace.dependencies]
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# HTTP
+axum = "0.8"
+reqwest = { version = "0.12", features = ["json"] }
+
+# Storage
+rusqlite = { version = "0.32", features = ["bundled"] }
+qdrant-client = "1"
+neo4rs = "0.8"
+
+# LLM
+rig-core = "0.11"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Time
+chrono = { version = "0.4", features = ["serde"] }
+
+# Error handling
+thiserror = "2"
+anyhow = "1"
+
+# CLI
+clap = { version = "4", features = ["derive"] }
+
+# Python
+pyo3 = { version = "0.23", features = ["extension-module"] }

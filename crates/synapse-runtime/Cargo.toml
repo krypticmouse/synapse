@@ -1,0 +1,22 @@
+[package]
+name = "synapse-runtime"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+synapse-core = { path = "../synapse-core" }
+tokio = { workspace = true }
+axum = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+rusqlite = { workspace = true }
+qdrant-client = { workspace = true }
+neo4rs = { workspace = true }
+rig-core = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+chrono = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+uuid = { version = "1", features = ["v4"] }
+tower-http = { version = "0.6", features = ["cors"] }

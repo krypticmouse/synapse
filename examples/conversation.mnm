@@ -1,0 +1,83 @@
+# conversation.mnm — Conversation memory with tiered storage
+#
+# Stores conversation messages and generates summaries.
+# Demonstrates namespaces, multiple memory types, and update rules.
+#
+# Usage:
+#   synapse apply examples/conversation.mnm
+#
+#   # Record a message
+#   synapse emit message '{"role": "user", "content": "Hello!", "session_id": "sess_1"}'
+#   synapse emit message '{"role": "assistant", "content": "Hi there!", "session_id": "sess_1"}'
+#
+#   # Get recent messages
+#   synapse query RecentMessages '{"session_id": "sess_1"}'
+#
+#   # Archive a session
+#   synapse emit archive_session '{"session_id": "sess_1", "summary": "Greeted the user"}'
+
+config {
+    storage: sqlite("./data/conversation.db")
+}
+
+namespace chat {
+
+    # Individual conversation messages
+    memory Message {
+        role: string
+        content: string
+        session_id: string
+        created_at: timestamp
+    }
+
+    # Session summaries (compacted from messages)
+    memory SessionSummary {
+        session_id: string
+        summary: string
+        message_count: int
+        created_at: timestamp
+    }
+
+    # Store incoming messages
+    on message(role: string, content: string, session_id: string) {
+        store(Message {
+            role: role,
+            content: content,
+            session_id: session_id,
+            created_at: now()
+        })
+    }
+
+    # Archive a session: store summary and clean up
+    on archive_session(session_id: string, summary: string) {
+        store(SessionSummary {
+            session_id: session_id,
+            summary: summary,
+            message_count: 0,
+            created_at: now()
+        })
+    }
+
+    # Get recent messages in a session
+    query RecentMessages(session_id: string): Message[] {
+        from Message
+        where session_id == session_id
+        order by created_at desc
+        limit 50
+    }
+
+    # Get all session summaries
+    query GetSummaries(): SessionSummary[] {
+        from SessionSummary
+        order by created_at desc
+    }
+
+    # Search messages by role
+    query SearchMessages(role: string): Message[] {
+        from Message
+        where role == role
+        order by created_at desc
+        limit 20
+    }
+
+}

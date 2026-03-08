@@ -1,0 +1,11 @@
+[package]
+name = "synapse-core"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+logos = "0.16"
+chumsky = "0.10"
+ariadne = "0.5"
+thiserror = { workspace = true }
+serde = { workspace = true }
