@@ -47,11 +47,7 @@ impl StorageBackend {
         dispatch!(self, get(type_name, id))
     }
 
-    pub async fn query(
-        &self,
-        type_name: &str,
-        filter: &QueryFilter,
-    ) -> StorageResult<Vec<Record>> {
+    pub async fn query(&self, type_name: &str, filter: &QueryFilter) -> StorageResult<Vec<Record>> {
         dispatch!(self, query(type_name, filter))
     }
 
@@ -63,7 +59,11 @@ impl StorageBackend {
         dispatch!(self, delete(type_name, id))
     }
 
-    pub async fn ensure_table(&self, type_name: &str, fields: &[(String, String)]) -> StorageResult<()> {
+    pub async fn ensure_table(
+        &self,
+        type_name: &str,
+        fields: &[(String, String)],
+    ) -> StorageResult<()> {
         dispatch!(self, ensure_table(type_name, fields))
     }
 }
@@ -120,11 +120,7 @@ impl StorageManager {
         Ok(())
     }
 
-    pub async fn query(
-        &self,
-        type_name: &str,
-        filter: &QueryFilter,
-    ) -> StorageResult<Vec<Record>> {
+    pub async fn query(&self, type_name: &str, filter: &QueryFilter) -> StorageResult<Vec<Record>> {
         if let Some(ref r) = self.relational {
             return r.query(type_name, filter).await;
         }
@@ -145,7 +141,11 @@ impl StorageManager {
         Ok(())
     }
 
-    pub async fn ensure_table(&self, type_name: &str, fields: &[(String, String)]) -> StorageResult<()> {
+    pub async fn ensure_table(
+        &self,
+        type_name: &str,
+        fields: &[(String, String)],
+    ) -> StorageResult<()> {
         if let Some(ref r) = self.relational {
             r.ensure_table(type_name, fields).await?;
         }

@@ -79,7 +79,7 @@ fn type_parser<'a>() -> impl Parser<'a, &'a [Token], Type, extra::Err<Rich<'a, T
                     .then_ignore(just(Token::Comma))
                     .then(
                         select! { Token::FloatLiteral(v) => v }
-                            .or(select! { Token::IntLiteral(v) => v as f64 })
+                            .or(select! { Token::IntLiteral(v) => v as f64 }),
                     )
                     .delimited_by(just(Token::LBracket), just(Token::RBracket))
                     .or_not(),
@@ -149,8 +149,8 @@ fn params<'a>() -> impl Parser<'a, &'a [Token], Vec<Param>, extra::Err<Rich<'a, 
 // type nesting and stack frame sizes.
 // ═══════════════════════════════════════════════════════════════
 
-fn build_program_parser<'a>(
-) -> impl Parser<'a, &'a [Token], Program, extra::Err<Rich<'a, Token>>> {
+fn build_program_parser<'a>() -> impl Parser<'a, &'a [Token], Program, extra::Err<Rich<'a, Token>>>
+{
     // ─── Expression parser ───────────────────────────────────
     let expr = recursive(|expr: Recursive<dyn Parser<'a, &'a [Token], Expr, _>>| {
         let literal = select! {
@@ -338,84 +338,100 @@ fn build_program_parser<'a>(
         .boxed();
 
         // multiplicative
-        let mul = unary.clone().foldl(
-            choice((
-                just(Token::Star).to(BinOp::Mul),
-                just(Token::Slash).to(BinOp::Div),
-                just(Token::Percent).to(BinOp::Mod),
-            ))
-            .then(unary)
-            .repeated(),
-            |l, (op, r)| Expr::Binary {
-                left: Box::new(l),
-                op,
-                right: Box::new(r),
-            },
-        ).boxed();
+        let mul = unary
+            .clone()
+            .foldl(
+                choice((
+                    just(Token::Star).to(BinOp::Mul),
+                    just(Token::Slash).to(BinOp::Div),
+                    just(Token::Percent).to(BinOp::Mod),
+                ))
+                .then(unary)
+                .repeated(),
+                |l, (op, r)| Expr::Binary {
+                    left: Box::new(l),
+                    op,
+                    right: Box::new(r),
+                },
+            )
+            .boxed();
 
         // additive
-        let add = mul.clone().foldl(
-            choice((
-                just(Token::Plus).to(BinOp::Add),
-                just(Token::Minus).to(BinOp::Sub),
-            ))
-            .then(mul)
-            .repeated(),
-            |l, (op, r)| Expr::Binary {
-                left: Box::new(l),
-                op,
-                right: Box::new(r),
-            },
-        ).boxed();
+        let add = mul
+            .clone()
+            .foldl(
+                choice((
+                    just(Token::Plus).to(BinOp::Add),
+                    just(Token::Minus).to(BinOp::Sub),
+                ))
+                .then(mul)
+                .repeated(),
+                |l, (op, r)| Expr::Binary {
+                    left: Box::new(l),
+                    op,
+                    right: Box::new(r),
+                },
+            )
+            .boxed();
 
         // comparison
-        let cmp = add.clone().foldl(
-            choice((
-                just(Token::EqEq).to(BinOp::Eq),
-                just(Token::BangEq).to(BinOp::Ne),
-                just(Token::LtEq).to(BinOp::Le),
-                just(Token::Lt).to(BinOp::Lt),
-                just(Token::GtEq).to(BinOp::Ge),
-                just(Token::Gt).to(BinOp::Gt),
-            ))
-            .then(add)
-            .repeated(),
-            |l, (op, r)| Expr::Binary {
-                left: Box::new(l),
-                op,
-                right: Box::new(r),
-            },
-        ).boxed();
+        let cmp = add
+            .clone()
+            .foldl(
+                choice((
+                    just(Token::EqEq).to(BinOp::Eq),
+                    just(Token::BangEq).to(BinOp::Ne),
+                    just(Token::LtEq).to(BinOp::Le),
+                    just(Token::Lt).to(BinOp::Lt),
+                    just(Token::GtEq).to(BinOp::Ge),
+                    just(Token::Gt).to(BinOp::Gt),
+                ))
+                .then(add)
+                .repeated(),
+                |l, (op, r)| Expr::Binary {
+                    left: Box::new(l),
+                    op,
+                    right: Box::new(r),
+                },
+            )
+            .boxed();
 
         // logical AND
-        let and_expr = cmp.clone().foldl(
-            just(Token::And).to(BinOp::And).then(cmp).repeated(),
-            |l, (op, r)| Expr::Binary {
-                left: Box::new(l),
-                op,
-                right: Box::new(r),
-            },
-        ).boxed();
+        let and_expr = cmp
+            .clone()
+            .foldl(
+                just(Token::And).to(BinOp::And).then(cmp).repeated(),
+                |l, (op, r)| Expr::Binary {
+                    left: Box::new(l),
+                    op,
+                    right: Box::new(r),
+                },
+            )
+            .boxed();
 
         // logical OR
-        let or_expr = and_expr.clone().foldl(
-            just(Token::Or).to(BinOp::Or).then(and_expr).repeated(),
-            |l, (op, r)| Expr::Binary {
-                left: Box::new(l),
-                op,
-                right: Box::new(r),
-            },
-        ).boxed();
+        let or_expr = and_expr
+            .clone()
+            .foldl(
+                just(Token::Or).to(BinOp::Or).then(and_expr).repeated(),
+                |l, (op, r)| Expr::Binary {
+                    left: Box::new(l),
+                    op,
+                    right: Box::new(r),
+                },
+            )
+            .boxed();
 
         // pipe: |>
         or_expr
             .clone()
-            .foldl(just(Token::PipeArrow).ignore_then(or_expr).repeated(), |l, r| {
-                Expr::Pipe {
+            .foldl(
+                just(Token::PipeArrow).ignore_then(or_expr).repeated(),
+                |l, r| Expr::Pipe {
                     left: Box::new(l),
                     right: Box::new(r),
-                }
-            })
+                },
+            )
             .boxed()
     });
 
@@ -504,7 +520,9 @@ fn build_program_parser<'a>(
 
     // ─── Memory ──────────────────────────────────────────────
     let decorator = choice((
-        just(Token::Index).ignore_then(any_name()).map(Decorator::Index),
+        just(Token::Index)
+            .ignore_then(any_name())
+            .map(Decorator::Index),
         just(Token::Invariant)
             .ignore_then(expr.clone())
             .map(Decorator::Invariant),
@@ -541,7 +559,13 @@ fn build_program_parser<'a>(
         .ignore_then(any_name())
         .then(params().delimited_by(just(Token::LParen), just(Token::RParen)))
         .then(stmts_block.clone())
-        .map(|((event, params), body)| Item::Handler(HandlerDef { event, params, body }))
+        .map(|((event, params), body)| {
+            Item::Handler(HandlerDef {
+                event,
+                params,
+                body,
+            })
+        })
         .boxed();
 
     // ─── Query ───────────────────────────────────────────────
@@ -666,10 +690,7 @@ fn build_program_parser<'a>(
         .boxed();
 
     // ─── Item (any top-level construct) ──────────────────────
-    let item = choice((
-        config, memory, handler, query, update, policy, extern_fn,
-    ))
-    .boxed();
+    let item = choice((config, memory, handler, query, update, policy, extern_fn)).boxed();
 
     // ─── Namespace or bare item ──────────────────────────────
     let ns_or_item = just(Token::Namespace)
@@ -714,13 +735,15 @@ mod tests {
 
     #[test]
     fn parse_config_with_entries() {
-        let result = parse(r#"
+        let result = parse(
+            r#"
             config {
                 storage: sqlite("./test.db")
                 vector: qdrant("localhost:6333")
                 graph: none
             }
-        "#);
+        "#,
+        );
         assert!(result.is_ok(), "error: {:?}", result.err());
         let prog = result.unwrap();
         if let Item::Config(cfg) = &prog.items[0] {
@@ -735,12 +758,14 @@ mod tests {
 
     #[test]
     fn parse_simple_memory() {
-        let result = parse(r#"
+        let result = parse(
+            r#"
             memory Note {
                 content: string
                 created_at: timestamp
             }
-        "#);
+        "#,
+        );
         assert!(result.is_ok(), "error: {:?}", result.err());
         let prog = result.unwrap();
         if let Item::Memory(mem) = &prog.items[0] {
@@ -755,14 +780,16 @@ mod tests {
 
     #[test]
     fn parse_memory_with_optional_and_array() {
-        let result = parse(r#"
+        let result = parse(
+            r#"
             memory Fact {
                 content: string
                 source: string?
                 tags: string[]
                 confidence: float[0.0,1.0]
             }
-        "#);
+        "#,
+        );
         assert!(result.is_ok(), "error: {:?}", result.err());
         let prog = result.unwrap();
         if let Item::Memory(mem) = &prog.items[0] {
@@ -776,32 +803,37 @@ mod tests {
 
     #[test]
     fn parse_handler() {
-        let result = parse(r#"
+        let result = parse(
+            r#"
             on save(content: string) {
                 store(Note {
                     content: content,
                     created_at: now()
                 })
             }
-        "#);
+        "#,
+        );
         assert!(result.is_ok(), "error: {:?}", result.err());
     }
 
     #[test]
     fn parse_query() {
-        let result = parse(r#"
+        let result = parse(
+            r#"
             query GetAll(): Note[] {
                 from Note
                 order by created_at desc
                 limit 10
             }
-        "#);
+        "#,
+        );
         assert!(result.is_ok(), "error: {:?}", result.err());
     }
 
     #[test]
     fn parse_update() {
-        let result = parse(r#"
+        let result = parse(
+            r#"
             update Fact {
                 on_access {
                     accessed_at = now()
@@ -811,28 +843,33 @@ mod tests {
                     if confidence < 0.1 { delete() }
                 }
             }
-        "#);
+        "#,
+        );
         assert!(result.is_ok(), "error: {:?}", result.err());
     }
 
     #[test]
     fn parse_comments() {
-        let result = parse(r#"
+        let result = parse(
+            r#"
             # This is a comment
             memory Note {
                 # field comment
                 content: string
             }
-        "#);
+        "#,
+        );
         assert!(result.is_ok(), "error: {:?}", result.err());
     }
 
     #[test]
     fn parse_extern_fn() {
-        let result = parse(r#"
+        let result = parse(
+            r#"
             @extern
             fn search(query: string, limit: int): ArchivalEntry[]
-        "#);
+        "#,
+        );
         assert!(result.is_ok(), "error: {:?}", result.err());
         let prog = result.unwrap();
         assert!(matches!(&prog.items[0], Item::ExternFn(_)));
@@ -840,13 +877,15 @@ mod tests {
 
     #[test]
     fn parse_namespace() {
-        let result = parse(r#"
+        let result = parse(
+            r#"
             namespace test_agent {
                 memory Note {
                     content: string
                 }
             }
-        "#);
+        "#,
+        );
         assert!(result.is_ok(), "error: {:?}", result.err());
         let prog = result.unwrap();
         if let Item::Namespace(ns) = &prog.items[0] {
@@ -859,20 +898,23 @@ mod tests {
 
     #[test]
     fn parse_pipe_chain() {
-        let result = parse(r#"
+        let result = parse(
+            r#"
             on process(content: string) {
                 content
                     |> extract()
                     |> filter(f => f.confidence > 0.7)
                     |> store()
             }
-        "#);
+        "#,
+        );
         assert!(result.is_ok(), "error: {:?}", result.err());
     }
 
     #[test]
     fn parse_on_conflict() {
-        let result = parse(r#"
+        let result = parse(
+            r#"
             update Fact {
                 on_conflict(old, new) {
                     if new.confidence > old.confidence {
@@ -880,20 +922,23 @@ mod tests {
                     }
                 }
             }
-        "#);
+        "#,
+        );
         assert!(result.is_ok(), "error: {:?}", result.err());
     }
 
     #[test]
     fn parse_policy() {
-        let result = parse(r#"
+        let result = parse(
+            r#"
             policy Refresh {
                 every 1h {
                     from ConnectorState
                     where last_sync < now() - 1h
                 }
             }
-        "#);
+        "#,
+        );
         assert!(result.is_ok(), "error: {:?}", result.err());
     }
 }

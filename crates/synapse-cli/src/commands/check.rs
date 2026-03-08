@@ -36,7 +36,15 @@ pub fn run(file: &str) -> anyhow::Result<()> {
     let mut policies = 0;
     let mut extern_fns = 0;
 
-    count_items(&program.items, &mut memories, &mut handlers, &mut queries, &mut updates, &mut policies, &mut extern_fns);
+    count_items(
+        &program.items,
+        &mut memories,
+        &mut handlers,
+        &mut queries,
+        &mut updates,
+        &mut policies,
+        &mut extern_fns,
+    );
 
     println!(
         "  ✓ {} memories, {} handlers, {} queries, {} update rules, {} policies, {} extern fns",
@@ -64,7 +72,9 @@ fn count_items(
             synapse_core::ast::Item::Policy(_) => *policies += 1,
             synapse_core::ast::Item::ExternFn(_) => *extern_fns += 1,
             synapse_core::ast::Item::Namespace(ns) => {
-                count_items(&ns.items, memories, handlers, queries, updates, policies, extern_fns);
+                count_items(
+                    &ns.items, memories, handlers, queries, updates, policies, extern_fns,
+                );
             }
             synapse_core::ast::Item::Config(_) => {}
         }

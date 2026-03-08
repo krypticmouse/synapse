@@ -132,9 +132,18 @@ pub struct UpdateDef {
 
 #[derive(Debug, Clone)]
 pub enum UpdateRule {
-    OnAccess { body: Vec<Stmt> },
-    OnConflict { old_name: String, new_name: String, body: Vec<Stmt> },
-    Every { interval: Duration, body: Vec<Stmt> },
+    OnAccess {
+        body: Vec<Stmt>,
+    },
+    OnConflict {
+        old_name: String,
+        new_name: String,
+        body: Vec<Stmt>,
+    },
+    Every {
+        interval: Duration,
+        body: Vec<Stmt>,
+    },
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -201,10 +210,24 @@ pub enum DurationUnit {
 
 #[derive(Debug, Clone)]
 pub enum Stmt {
-    Let { name: String, value: Expr },
-    Assign { target: Expr, value: Expr },
-    If { condition: Expr, then_body: Vec<Stmt>, else_body: Option<Vec<Stmt>> },
-    For { var: String, iter: Expr, body: Vec<Stmt> },
+    Let {
+        name: String,
+        value: Expr,
+    },
+    Assign {
+        target: Expr,
+        value: Expr,
+    },
+    If {
+        condition: Expr,
+        then_body: Vec<Stmt>,
+        else_body: Option<Vec<Stmt>>,
+    },
+    For {
+        var: String,
+        iter: Expr,
+        body: Vec<Stmt>,
+    },
     Return(Option<Expr>),
     Expr(Expr),
 }
@@ -225,25 +248,53 @@ pub enum Expr {
 
     // Identifiers & access
     Ident(String),
-    FieldAccess { object: Box<Expr>, field: String },
-    OptionalChain { object: Box<Expr>, field: String },
-    IndexAccess { object: Box<Expr>, index: Box<Expr> },
+    FieldAccess {
+        object: Box<Expr>,
+        field: String,
+    },
+    OptionalChain {
+        object: Box<Expr>,
+        field: String,
+    },
+    IndexAccess {
+        object: Box<Expr>,
+        index: Box<Expr>,
+    },
 
     // Operators
-    Binary { left: Box<Expr>, op: BinOp, right: Box<Expr> },
-    Unary { op: UnaryOp, operand: Box<Expr> },
+    Binary {
+        left: Box<Expr>,
+        op: BinOp,
+        right: Box<Expr>,
+    },
+    Unary {
+        op: UnaryOp,
+        operand: Box<Expr>,
+    },
 
     // Calls
-    Call { func: Box<Expr>, args: Vec<CallArg> },
+    Call {
+        func: Box<Expr>,
+        args: Vec<CallArg>,
+    },
 
     // Pipe chain: left |> right
-    Pipe { left: Box<Expr>, right: Box<Expr> },
+    Pipe {
+        left: Box<Expr>,
+        right: Box<Expr>,
+    },
 
     // Struct construction: Name { field: value, ... }
-    StructInit { name: String, fields: Vec<FieldInit> },
+    StructInit {
+        name: String,
+        fields: Vec<FieldInit>,
+    },
 
     // Lambda: param => body  OR  (p1, p2) => body
-    Lambda { params: Vec<String>, body: Box<Expr> },
+    Lambda {
+        params: Vec<String>,
+        body: Box<Expr>,
+    },
 
     // Array literal: [a, b, c]
     Array(Vec<Expr>),
@@ -266,9 +317,19 @@ pub struct FieldInit {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum BinOp {
-    Add, Sub, Mul, Div, Mod,
-    Eq, Ne, Lt, Le, Gt, Ge,
-    And, Or,
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Mod,
+    Eq,
+    Ne,
+    Lt,
+    Le,
+    Gt,
+    Ge,
+    And,
+    Or,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]

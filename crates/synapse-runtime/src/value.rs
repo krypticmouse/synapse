@@ -121,9 +121,7 @@ impl From<serde_json::Value> for Value {
                 }
             }
             serde_json::Value::String(s) => Value::String(s),
-            serde_json::Value::Array(a) => {
-                Value::Array(a.into_iter().map(Value::from).collect())
-            }
+            serde_json::Value::Array(a) => Value::Array(a.into_iter().map(Value::from).collect()),
             serde_json::Value::Object(o) => {
                 let mut fields: HashMap<String, Value> =
                     o.into_iter().map(|(k, v)| (k, Value::from(v))).collect();

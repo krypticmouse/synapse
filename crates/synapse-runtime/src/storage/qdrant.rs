@@ -9,7 +9,9 @@ pub struct QdrantBackend {
 
 impl std::fmt::Debug for QdrantBackend {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("QdrantBackend").field("url", &self.url).finish()
+        f.debug_struct("QdrantBackend")
+            .field("url", &self.url)
+            .finish()
     }
 }
 
@@ -30,7 +32,9 @@ impl QdrantBackend {
         type_name: &str,
         _fields: &[(String, String)],
     ) -> StorageResult<()> {
-        let client = self.client.as_ref()
+        let client = self
+            .client
+            .as_ref()
             .ok_or_else(|| StorageError::NotConnected("qdrant".into()))?;
 
         // Check if collection exists, create if not
@@ -54,7 +58,9 @@ impl QdrantBackend {
     }
 
     pub async fn store(&self, record: &Record) -> StorageResult<()> {
-        let _client = self.client.as_ref()
+        let _client = self
+            .client
+            .as_ref()
             .ok_or_else(|| StorageError::NotConnected("qdrant".into()))?;
 
         // In a full implementation, we would:
@@ -70,7 +76,9 @@ impl QdrantBackend {
     }
 
     pub async fn get(&self, _type_name: &str, _id: &str) -> StorageResult<Option<Record>> {
-        let _client = self.client.as_ref()
+        let _client = self
+            .client
+            .as_ref()
             .ok_or_else(|| StorageError::NotConnected("qdrant".into()))?;
         // Vector DB is primarily for search, not get-by-id
         Ok(None)
@@ -81,7 +89,9 @@ impl QdrantBackend {
         _type_name: &str,
         _filter: &QueryFilter,
     ) -> StorageResult<Vec<Record>> {
-        let _client = self.client.as_ref()
+        let _client = self
+            .client
+            .as_ref()
             .ok_or_else(|| StorageError::NotConnected("qdrant".into()))?;
 
         // In a full implementation, we would:
@@ -96,7 +106,9 @@ impl QdrantBackend {
     }
 
     pub async fn delete(&self, _type_name: &str, _id: &str) -> StorageResult<()> {
-        let _client = self.client.as_ref()
+        let _client = self
+            .client
+            .as_ref()
             .ok_or_else(|| StorageError::NotConnected("qdrant".into()))?;
         Ok(())
     }

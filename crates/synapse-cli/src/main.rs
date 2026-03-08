@@ -90,7 +90,13 @@ enum Command {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt::init();
+    use tracing_subscriber::{fmt, EnvFilter};
+
+    fmt()
+        .with_env_filter(
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
+        )
+        .init();
 
     let cli = Cli::parse();
 
@@ -101,9 +107,7 @@ async fn main() -> anyhow::Result<()> {
         Command::Apply { file, port, daemon } => commands::apply::run(&file, port, daemon).await,
         Command::Status => commands::status::run().await,
         Command::Reload => commands::reload::run(),
-        Command::Logs { follow, level } => {
-            commands::logs::run(follow, level.as_deref())
-        }
+        Command::Logs { follow, level } => commands::logs::run(follow, level.as_deref()),
         Command::Destroy { purge } => commands::destroy::run(purge),
         Command::Query { name, params } => commands::query::run(&name, &params).await,
         Command::Emit { event, payload } => commands::emit::run(&event, &payload).await,

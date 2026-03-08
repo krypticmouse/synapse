@@ -17,7 +17,10 @@ pub struct PolicyScheduler {
 }
 
 impl PolicyScheduler {
-    pub fn from_program(program: &synapse_core::ast::Program, storage: Arc<StorageManager>) -> Self {
+    pub fn from_program(
+        program: &synapse_core::ast::Program,
+        storage: Arc<StorageManager>,
+    ) -> Self {
         let mut periodic_rules = Vec::new();
 
         collect_periodic_rules(&program.items, &mut periodic_rules);
@@ -82,11 +85,7 @@ fn collect_periodic_rules(items: &[Item], rules: &mut Vec<(String, u64, UpdateDe
             Item::Update(u) => {
                 for rule in &u.rules {
                     if let UpdateRule::Every { interval, .. } = rule {
-                        rules.push((
-                            u.target.clone(),
-                            interval.to_secs(),
-                            u.clone(),
-                        ));
+                        rules.push((u.target.clone(), interval.to_secs(), u.clone()));
                     }
                 }
             }
@@ -98,11 +97,7 @@ fn collect_periodic_rules(items: &[Item], rules: &mut Vec<(String, u64, UpdateDe
                 };
                 for rule in &p.rules {
                     if let UpdateRule::Every { interval, .. } = rule {
-                        rules.push((
-                            p.name.clone(),
-                            interval.to_secs(),
-                            pseudo_update.clone(),
-                        ));
+                        rules.push((p.name.clone(), interval.to_secs(), pseudo_update.clone()));
                     }
                 }
             }

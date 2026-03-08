@@ -86,22 +86,30 @@ fn register_items(env: &mut TypeEnv, items: &[Item]) {
                 env.memories.insert(mem.name.clone(), fields);
             }
             Item::Query(q) => {
-                let params: Vec<_> = q.params.iter()
+                let params: Vec<_> = q
+                    .params
+                    .iter()
                     .map(|p| (p.name.clone(), p.ty.clone()))
                     .collect();
-                env.queries.insert(q.name.clone(), (params, q.return_ty.clone()));
+                env.queries
+                    .insert(q.name.clone(), (params, q.return_ty.clone()));
             }
             Item::Handler(h) => {
-                let params: Vec<_> = h.params.iter()
+                let params: Vec<_> = h
+                    .params
+                    .iter()
                     .map(|p| (p.name.clone(), p.ty.clone()))
                     .collect();
                 env.handlers.insert(h.event.clone(), params);
             }
             Item::ExternFn(ef) => {
-                let params: Vec<_> = ef.params.iter()
+                let params: Vec<_> = ef
+                    .params
+                    .iter()
                     .map(|p| (p.name.clone(), p.ty.clone()))
                     .collect();
-                env.extern_fns.insert(ef.name.clone(), (params, ef.return_ty.clone()));
+                env.extern_fns
+                    .insert(ef.name.clone(), (params, ef.return_ty.clone()));
             }
             Item::Namespace(ns) => {
                 register_items(env, &ns.items);
@@ -216,7 +224,9 @@ fn check_update_rule(env: &mut TypeEnv, target: &str, rule: &UpdateRule) {
         }
     }
     match rule {
-        UpdateRule::OnConflict { old_name, new_name, .. } => {
+        UpdateRule::OnConflict {
+            old_name, new_name, ..
+        } => {
             if let Some(fields) = env.memories.get(target).cloned() {
                 // old and new are both of the memory type
                 env.define_local(old_name, Type::Named(target.to_string()));
@@ -236,7 +246,9 @@ fn check_update_rule(env: &mut TypeEnv, target: &str, rule: &UpdateRule) {
 
 fn check_update_rule_body(env: &mut TypeEnv, rule: &UpdateRule) {
     match rule {
-        UpdateRule::OnAccess { body } | UpdateRule::OnConflict { body, .. } | UpdateRule::Every { body, .. } => {
+        UpdateRule::OnAccess { body }
+        | UpdateRule::OnConflict { body, .. }
+        | UpdateRule::Every { body, .. } => {
             check_stmts(env, body);
         }
     }
@@ -259,7 +271,11 @@ fn check_stmt(env: &mut TypeEnv, stmt: &Stmt) {
             check_expr(env, target);
             check_expr(env, value);
         }
-        Stmt::If { condition, then_body, else_body } => {
+        Stmt::If {
+            condition,
+            then_body,
+            else_body,
+        } => {
             check_expr(env, condition);
             env.push_scope();
             check_stmts(env, then_body);
@@ -327,10 +343,7 @@ fn check_expr(env: &mut TypeEnv, expr: &Expr) {
                 for fi in fields {
                     check_expr(env, &fi.value);
                     if !mem_fields.contains_key(&fi.name) {
-                        env.error(format!(
-                            "unknown field '{}' in memory '{name}'",
-                            fi.name
-                        ));
+                        env.error(format!("unknown field '{}' in memory '{name}'", fi.name));
                     }
                 }
             }
@@ -361,23 +374,26 @@ fn infer_expr_type(env: &TypeEnv, expr: &Expr) -> Option<Type> {
         Expr::Null => None,
         Expr::Duration(_) => Some(Type::Timestamp),
         Expr::Ident(name) => env.lookup(name).cloned(),
-        Expr::Binary { left, op, .. } => {
-            match op {
-                BinOp::Eq | BinOp::Ne | BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge
-                | BinOp::And | BinOp::Or => Some(Type::Bool),
-                _ => infer_expr_type(env, left),
-            }
-        }
+        Expr::Binary { left, op, .. } => match op {
+            BinOp::Eq
+            | BinOp::Ne
+            | BinOp::Lt
+            | BinOp::Le
+            | BinOp::Gt
+            | BinOp::Ge
+            | BinOp::And
+            | BinOp::Or => Some(Type::Bool),
+            _ => infer_expr_type(env, left),
+        },
         Expr::Unary { op, operand } => match op {
             UnaryOp::Not => Some(Type::Bool),
             UnaryOp::Neg => infer_expr_type(env, operand),
         },
         Expr::Call { .. } => None, // Can't infer without function signatures
-        Expr::Array(elems) => {
-            elems.first()
-                .and_then(|e| infer_expr_type(env, e))
-                .map(|t| Type::Array(Box::new(t)))
-        }
+        Expr::Array(elems) => elems
+            .first()
+            .and_then(|e| infer_expr_type(env, e))
+            .map(|t| Type::Array(Box::new(t))),
         _ => None,
     }
 }
@@ -399,7 +415,8 @@ mod tests {
 
     #[test]
     fn check_valid_program() {
-        let prog = parser::parse(r#"
+        let prog = parser::parse(
+            r#"
             memory Note {
                 content: string
                 created_at: timestamp
@@ -414,7 +431,9 @@ mod tests {
                 from Note
                 order by created_at desc
             }
-        "#).unwrap();
+        "#,
+        )
+        .unwrap();
 
         let result = check(&prog);
         assert!(result.is_ok());
@@ -422,13 +441,16 @@ mod tests {
 
     #[test]
     fn check_unknown_memory_in_update() {
-        let prog = parser::parse(r#"
+        let prog = parser::parse(
+            r#"
             update NonExistent {
                 on_access {
                     x = 1
                 }
             }
-        "#).unwrap();
+        "#,
+        )
+        .unwrap();
 
         let result = check(&prog);
         assert!(result.is_err());
@@ -436,12 +458,15 @@ mod tests {
 
     #[test]
     fn check_duplicate_fields() {
-        let prog = parser::parse(r#"
+        let prog = parser::parse(
+            r#"
             memory Bad {
                 name: string
                 name: int
             }
-        "#).unwrap();
+        "#,
+        )
+        .unwrap();
 
         let result = check(&prog);
         assert!(result.is_err());

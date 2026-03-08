@@ -6,10 +6,7 @@ use crate::storage::{Condition, ConditionOp, QueryFilter};
 use crate::value::{Record, Value};
 
 /// Execute a query definition against storage.
-pub async fn exec_query(
-    env: &mut ExecEnv,
-    query: &QueryDef,
-) -> anyhow::Result<Vec<Value>> {
+pub async fn exec_query(env: &mut ExecEnv, query: &QueryDef) -> anyhow::Result<Vec<Value>> {
     let body = &query.body;
 
     let mut filter = QueryFilter::default();
@@ -48,11 +45,7 @@ pub async fn exec_query(
 
 /// Extract simple field-comparison conditions from a where clause expression.
 /// Complex conditions (semantic_match, graph_match) are currently passed through.
-async fn extract_conditions(
-    env: &mut ExecEnv,
-    expr: &Expr,
-    conditions: &mut Vec<Condition>,
-) {
+async fn extract_conditions(env: &mut ExecEnv, expr: &Expr, conditions: &mut Vec<Condition>) {
     match expr {
         // field == value
         Expr::Binary { left, op, right } => {

@@ -1,0 +1,136 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "scopeName": "source.mnm",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#keywords" },
+    { "include": "#types" },
+    { "include": "#literals" },
+    { "include": "#operators" },
+    { "include": "#decorators" },
+    { "include": "#builtins" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "match": "#.*$",
+          "name": "comment.line.number-sign.mnm"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "begin": "\"",
+          "end": "\"",
+          "name": "string.quoted.double.mnm",
+          "patterns": [
+            { "include": "#string-escapes" }
+          ]
+        },
+        {
+          "begin": "'",
+          "end": "'",
+          "name": "string.quoted.single.mnm",
+          "patterns": [
+            { "include": "#string-escapes" }
+          ]
+        }
+      ]
+    },
+    "string-escapes": {
+      "match": "\\\\.",
+      "name": "constant.character.escape.mnm"
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "match": "\\b(config|memory|namespace|query|update|on|fn|policy)\\b",
+          "name": "keyword.control.mnm"
+        },
+        {
+          "match": "\\b(if|else|let|mut|return|for|in|none)\\b",
+          "name": "keyword.control.flow.mnm"
+        },
+        {
+          "match": "\\b(on_access|on_conflict|every)\\b",
+          "name": "keyword.other.update.mnm"
+        },
+        {
+          "match": "\\b(where|order|limit|by|asc|desc|from|and|or|not)\\b",
+          "name": "keyword.other.query.mnm"
+        }
+      ]
+    },
+    "types": {
+      "match": "\\b(string|int|float|bool|timestamp)\\b",
+      "name": "storage.type.mnm"
+    },
+    "literals": {
+      "patterns": [
+        {
+          "match": "\\b(true|false)\\b",
+          "name": "constant.language.boolean.mnm"
+        },
+        {
+          "match": "\\bnull\\b",
+          "name": "constant.language.null.mnm"
+        },
+        {
+          "match": "\\b\\d+\\.\\d+\\b",
+          "name": "constant.numeric.float.mnm"
+        },
+        {
+          "match": "\\b\\d+[smhdw]\\b",
+          "name": "constant.numeric.duration.mnm"
+        },
+        {
+          "match": "\\b\\d+\\b",
+          "name": "constant.numeric.integer.mnm"
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "match": "\\|>|->|=>",
+          "name": "keyword.operator.arrow.mnm"
+        },
+        {
+          "match": "==|!=|<=|>=",
+          "name": "keyword.operator.comparison.mnm"
+        },
+        {
+          "match": "[=<>]",
+          "name": "keyword.operator.assignment.mnm"
+        },
+        {
+          "match": "[+\\-*/%]",
+          "name": "keyword.operator.arithmetic.mnm"
+        },
+        {
+          "match": "\\?|\\||\\.\\.|\\.",
+          "name": "keyword.operator.other.mnm"
+        },
+        {
+          "match": "[:;,{}\\[\\]\\(\\)]",
+          "name": "punctuation.definition.mnm"
+        }
+      ]
+    },
+    "decorators": {
+      "match": "@(extern|index|invariant)\\b",
+      "name": "meta.annotation.mnm"
+    },
+    "builtins": {
+      "patterns": [
+        {
+          "match": "\\b(store|now|supersede|discard|delete|emit|extract|map|filter|each|semantic_match|regex|graph_match|cypher|sql|summarize|extract_preferences|extract_expertise|extract_topics)\\b",
+          "name": "support.function.builtin.mnm"
+        }
+      ]
+    }
+  }
+}

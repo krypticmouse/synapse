@@ -1,4 +1,5 @@
 use rusqlite::{params_from_iter, Connection};
+use std::path::Path;
 use std::sync::Mutex;
 
 use super::{Condition, ConditionOp, QueryFilter, StorageError, StorageResult};
@@ -11,13 +12,20 @@ pub struct SqliteBackend {
 
 impl SqliteBackend {
     pub fn open(path: &str) -> StorageResult<Self> {
-        let conn = Connection::open(path)
-            .map_err(|e| StorageError::Sqlite(e.to_string()))?;
+        let p = Path::new(path);
+        if p != Path::new(":memory:") {
+            if let Some(parent) = p.parent() {
+                std::fs::create_dir_all(parent).map_err(|e| {
+                    StorageError::Sqlite(format!("failed to create data directory: {e}"))
+                })?;
+            }
+        }
+        let conn = Connection::open(path).map_err(|e| StorageError::Sqlite(e.to_string()))?;
 
         conn.execute_batch(
             "PRAGMA journal_mode=WAL;
              PRAGMA synchronous=NORMAL;
-             PRAGMA foreign_keys=ON;"
+             PRAGMA foreign_keys=ON;",
         )
         .map_err(|e| StorageError::Sqlite(e.to_string()))?;
 
@@ -116,11 +124,7 @@ impl SqliteBackend {
         }
     }
 
-    pub async fn query(
-        &self,
-        type_name: &str,
-        filter: &QueryFilter,
-    ) -> StorageResult<Vec<Record>> {
+    pub async fn query(&self, type_name: &str, filter: &QueryFilter) -> StorageResult<Vec<Record>> {
         let conn = self.conn.lock().unwrap();
 
         let mut sql = format!("SELECT * FROM {type_name}");

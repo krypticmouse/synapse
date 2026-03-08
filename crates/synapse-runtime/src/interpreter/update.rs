@@ -34,7 +34,9 @@ pub async fn exec_on_access(
                         updated_record.set(name, new_val);
                     }
                 }
-                env.storage.relational.as_ref()
+                env.storage
+                    .relational
+                    .as_ref()
                     .map(|s| async { s.update(&updated_record).await });
 
                 env.pop_scope();
@@ -73,10 +75,7 @@ pub async fn exec_on_conflict(
 }
 
 /// Execute periodic `every` rules for a memory type.
-pub async fn exec_every(
-    env: &mut ExecEnv,
-    update: &UpdateDef,
-) -> anyhow::Result<()> {
+pub async fn exec_every(env: &mut ExecEnv, update: &UpdateDef) -> anyhow::Result<()> {
     for rule in &update.rules {
         if let UpdateRule::Every { body, .. } = rule {
             // Get all records of this type
@@ -102,7 +101,9 @@ pub async fn exec_every(
                         updated.set(name, new_val);
                     }
                 }
-                env.storage.relational.as_ref()
+                env.storage
+                    .relational
+                    .as_ref()
                     .map(|s| async { s.update(&updated).await });
 
                 env.pop_scope();

@@ -1,5 +1,5 @@
-use pyo3::prelude::*;
 use pyo3::exceptions::PyRuntimeError;
+use pyo3::prelude::*;
 
 /// Python wrapper around `synapse_sdk::Client`.
 #[pyclass]
@@ -35,10 +35,17 @@ impl SynapseClient {
     /// Returns:
     ///     Dict with the handler result
     #[pyo3(signature = (event, payload = None))]
-    fn emit(&self, py: Python<'_>, event: &str, payload: Option<&Bound<'_, PyAny>>) -> PyResult<PyObject> {
+    fn emit(
+        &self,
+        py: Python<'_>,
+        event: &str,
+        payload: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<PyObject> {
         let payload_json = python_to_json(py, payload)?;
 
-        let result = self.rt.block_on(self.client.emit(event, payload_json))
+        let result = self
+            .rt
+            .block_on(self.client.emit(event, payload_json))
             .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
 
         json_to_python(py, &result)
@@ -53,10 +60,17 @@ impl SynapseClient {
     /// Returns:
     ///     Query results as a list of dicts
     #[pyo3(signature = (query_name, params = None))]
-    fn query(&self, py: Python<'_>, query_name: &str, params: Option<&Bound<'_, PyAny>>) -> PyResult<PyObject> {
+    fn query(
+        &self,
+        py: Python<'_>,
+        query_name: &str,
+        params: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<PyObject> {
         let params_json = python_to_json(py, params)?;
 
-        let result = self.rt.block_on(self.client.query(query_name, params_json))
+        let result = self
+            .rt
+            .block_on(self.client.query(query_name, params_json))
             .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
 
         json_to_python(py, &result)
@@ -69,7 +83,9 @@ impl SynapseClient {
 
     /// Get runtime health info.
     fn health(&self, py: Python<'_>) -> PyResult<PyObject> {
-        let resp = self.rt.block_on(self.client.health())
+        let resp = self
+            .rt
+            .block_on(self.client.health())
             .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
 
         let dict = pyo3::types::PyDict::new(py);
@@ -80,7 +96,9 @@ impl SynapseClient {
 
     /// Get runtime status info.
     fn status(&self, py: Python<'_>) -> PyResult<PyObject> {
-        let resp = self.rt.block_on(self.client.status())
+        let resp = self
+            .rt
+            .block_on(self.client.status())
             .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
 
         let dict = pyo3::types::PyDict::new(py);
@@ -111,9 +129,7 @@ fn python_to_json(_py: Python<'_>, obj: Option<&Bound<'_, PyAny>>) -> PyResult<s
 
     // Convert via Python's json module
     let json_mod = obj.py().import("json")?;
-    let json_str: String = json_mod
-        .call_method1("dumps", (obj,))?
-        .extract()?;
+    let json_str: String = json_mod.call_method1("dumps", (obj,))?.extract()?;
 
     serde_json::from_str(&json_str)
         .map_err(|e| PyRuntimeError::new_err(format!("JSON conversion failed: {e}")))

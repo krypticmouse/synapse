@@ -1,0 +1,30 @@
+{
+  "name": "synapse-mnm",
+  "displayName": "Synapse (.mnm) Syntax",
+  "description": "Syntax highlighting for Synapse memory configuration language (.mnm)",
+  "version": "0.1.0",
+  "publisher": "synapse",
+  "engines": {
+    "vscode": "^1.74.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "mnm",
+        "aliases": ["Synapse", "mnm"],
+        "extensions": [".mnm"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "mnm",
+        "scopeName": "source.mnm",
+        "path": "./syntaxes/mnm.tmLanguage.json"
+      }
+    ]
+  }
+}

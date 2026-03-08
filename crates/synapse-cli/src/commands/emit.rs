@@ -1,8 +1,8 @@
 pub async fn run(event: &str, payload_json: &str) -> anyhow::Result<()> {
     let client = crate::commands::status::get_client_from_state()?;
 
-    let payload: serde_json::Value = serde_json::from_str(payload_json)
-        .unwrap_or(serde_json::json!({}));
+    let payload: serde_json::Value =
+        serde_json::from_str(payload_json).unwrap_or(serde_json::json!({}));
 
     match client.emit(event, payload).await {
         Ok(result) => {

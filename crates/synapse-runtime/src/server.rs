@@ -98,9 +98,21 @@ async fn status(State(state): State<AppState>) -> impl IntoResponse {
 
     Json(StatusResponse {
         status: "running".into(),
-        handlers: rt.handler_names().into_iter().map(|s| s.to_string()).collect(),
-        queries: rt.query_names().into_iter().map(|s| s.to_string()).collect(),
-        memories: rt.memory_names().into_iter().map(|s| s.to_string()).collect(),
+        handlers: rt
+            .handler_names()
+            .into_iter()
+            .map(|s| s.to_string())
+            .collect(),
+        queries: rt
+            .query_names()
+            .into_iter()
+            .map(|s| s.to_string())
+            .collect(),
+        memories: rt
+            .memory_names()
+            .into_iter()
+            .map(|s| s.to_string())
+            .collect(),
         uptime_secs: uptime,
     })
 }
@@ -109,6 +121,7 @@ async fn emit(
     State(state): State<AppState>,
     Json(req): Json<EmitRequest>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    tracing::info!("emit {} {}", req.event, req.payload);
     let rt = state.read().await;
     match rt.emit(&req.event, req.payload).await {
         Ok(result) => Ok(Json(result)),
@@ -120,6 +133,7 @@ async fn query(
     State(state): State<AppState>,
     Json(req): Json<QueryRequest>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    tracing::info!("query {} {}", req.query, req.params);
     let rt = state.read().await;
     match rt.query(&req.query, req.params).await {
         Ok(result) => Ok(Json(result)),

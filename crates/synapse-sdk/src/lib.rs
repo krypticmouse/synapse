@@ -50,11 +50,7 @@ impl Client {
     }
 
     /// Emit an event to trigger a handler.
-    pub async fn emit(
-        &self,
-        event: &str,
-        payload: serde_json::Value,
-    ) -> Result<serde_json::Value> {
+    pub async fn emit(&self, event: &str, payload: serde_json::Value) -> Result<serde_json::Value> {
         let url = format!("{}/emit", self.base_url);
         let body = serde_json::json!({
             "event": event,

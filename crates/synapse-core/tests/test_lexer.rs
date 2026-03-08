@@ -70,7 +70,10 @@ fn int_literal() {
 #[test]
 fn double_quoted_strings() {
     let mut lex = Token::lexer(r#""hello world" "test""#);
-    assert_eq!(lex.next(), Some(Ok(Token::StringLiteral("hello world".into()))));
+    assert_eq!(
+        lex.next(),
+        Some(Ok(Token::StringLiteral("hello world".into())))
+    );
     assert_eq!(lex.next(), Some(Ok(Token::StringLiteral("test".into()))));
     assert_eq!(lex.next(), std::option::Option::None);
 }

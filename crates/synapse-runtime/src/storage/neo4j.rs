@@ -9,7 +9,9 @@ pub struct Neo4jBackend {
 
 impl std::fmt::Debug for Neo4jBackend {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Neo4jBackend").field("url", &self.url).finish()
+        f.debug_struct("Neo4jBackend")
+            .field("url", &self.url)
+            .finish()
     }
 }
 
@@ -35,7 +37,9 @@ impl Neo4jBackend {
     }
 
     pub async fn store(&self, record: &Record) -> StorageResult<()> {
-        let graph = self.graph.as_ref()
+        let graph = self
+            .graph
+            .as_ref()
             .ok_or_else(|| StorageError::NotConnected("neo4j".into()))?;
 
         // Store as a node with label = type_name
@@ -71,13 +75,13 @@ impl Neo4jBackend {
     }
 
     pub async fn get(&self, type_name: &str, id: &str) -> StorageResult<Option<Record>> {
-        let graph = self.graph.as_ref()
+        let graph = self
+            .graph
+            .as_ref()
             .ok_or_else(|| StorageError::NotConnected("neo4j".into()))?;
 
-        let query = neo4rs::query(&format!(
-            "MATCH (n:{type_name} {{_id: $id}}) RETURN n"
-        ))
-        .param("id", id.to_string());
+        let query = neo4rs::query(&format!("MATCH (n:{type_name} {{_id: $id}}) RETURN n"))
+            .param("id", id.to_string());
 
         let mut result = graph
             .execute(query)
@@ -101,7 +105,9 @@ impl Neo4jBackend {
                     continue;
                 }
                 if let Ok(val) = node.get::<String>(key) {
-                    record.fields.insert(key.to_string(), crate::value::Value::String(val));
+                    record
+                        .fields
+                        .insert(key.to_string(), crate::value::Value::String(val));
                 }
             }
 
@@ -111,12 +117,10 @@ impl Neo4jBackend {
         }
     }
 
-    pub async fn query(
-        &self,
-        type_name: &str,
-        filter: &QueryFilter,
-    ) -> StorageResult<Vec<Record>> {
-        let graph = self.graph.as_ref()
+    pub async fn query(&self, type_name: &str, filter: &QueryFilter) -> StorageResult<Vec<Record>> {
+        let graph = self
+            .graph
+            .as_ref()
             .ok_or_else(|| StorageError::NotConnected("neo4j".into()))?;
 
         let mut cypher = format!("MATCH (n:{type_name})");
@@ -134,7 +138,12 @@ impl Neo4jBackend {
                         super::ConditionOp::Gt => ">",
                         super::ConditionOp::Ge => ">=",
                     };
-                    format!("n.{} {} '{}'", c.field, op, value_to_cypher_string(&c.value))
+                    format!(
+                        "n.{} {} '{}'",
+                        c.field,
+                        op,
+                        value_to_cypher_string(&c.value)
+                    )
                 })
                 .collect();
             cypher.push_str(&format!(" WHERE {}", clauses.join(" AND ")));
@@ -174,7 +183,9 @@ impl Neo4jBackend {
                         record.id = id;
                     }
                 } else if let Ok(val) = node.get::<String>(key) {
-                    record.fields.insert(key.to_string(), crate::value::Value::String(val));
+                    record
+                        .fields
+                        .insert(key.to_string(), crate::value::Value::String(val));
                 }
             }
             records.push(record);
@@ -188,7 +199,9 @@ impl Neo4jBackend {
     }
 
     pub async fn delete(&self, type_name: &str, id: &str) -> StorageResult<()> {
-        let graph = self.graph.as_ref()
+        let graph = self
+            .graph
+            .as_ref()
             .ok_or_else(|| StorageError::NotConnected("neo4j".into()))?;
 
         let query = neo4rs::query(&format!(

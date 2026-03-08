@@ -25,6 +25,8 @@ The simplest memory system: store notes and retrieve them.
 ./target/release/synapse apply examples/hello.mnm
 ```
 
+> **Note:** Data persists in `./data/`. For a fresh start, run `./target/release/synapse destroy --purge` before applying again.
+
 In a separate terminal:
 
 ```bash
@@ -131,6 +133,33 @@ In a separate terminal:
 # Get top topics by sentiment
 ./target/release/synapse query TopTopics '{"user_id": "u1"}'
 ```
+
+---
+
+## Syntax Highlighting (VS Code / Cursor)
+
+A syntax highlighter for `.mnm` files is available in `extensions/synapse-vscode/`.
+
+**Option 1 — Run in development (quickest):**
+
+1. **File → Open Folder** → select `extensions/synapse-vscode`
+2. Press **F5** (or **Run → Start Debugging**) to launch a new window with the extension loaded
+3. In the new window, open any `.mnm` file to see syntax highlighting
+
+**Option 2 — Install as a local extension:**
+
+```bash
+cd extensions/synapse-vscode
+npm install -g @vscode/vsce   # if you don't have vsce
+vsce package
+code --install-extension synapse-mnm-0.1.0.vsix
+```
+
+Restart Cursor/VS Code; `.mnm` files will be highlighted in your normal workspace.
+
+**Option 3 — Multi-root workspace:** Add `extensions/synapse-vscode` to your workspace, press **F5**, then open the Synapse project in the new window.
+
+See `extensions/synapse-vscode/README.md` for more details.
 
 ---
 

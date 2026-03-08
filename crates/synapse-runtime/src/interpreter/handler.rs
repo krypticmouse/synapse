@@ -151,9 +151,7 @@ async fn eval_expr_inner(env: &mut ExecEnv, expr: &Expr) -> anyhow::Result<Value
             }
         }
 
-        Expr::Call { func, args } => {
-            eval_call(env, func, args).await
-        }
+        Expr::Call { func, args } => eval_call(env, func, args).await,
 
         Expr::Pipe { left, right } => {
             let left_val = eval_expr(env, left).await?;
@@ -206,11 +204,7 @@ async fn eval_expr_inner(env: &mut ExecEnv, expr: &Expr) -> anyhow::Result<Value
 }
 
 /// Evaluate a function call
-async fn eval_call(
-    env: &mut ExecEnv,
-    func: &Expr,
-    args: &[CallArg],
-) -> anyhow::Result<Value> {
+async fn eval_call(env: &mut ExecEnv, func: &Expr, args: &[CallArg]) -> anyhow::Result<Value> {
     // Get function name
     let func_name = match func {
         Expr::Ident(name) => name.as_str(),
@@ -290,13 +284,9 @@ async fn eval_call(
             Ok(Value::Array(vec![]))
         }
 
-        "filter" => {
-            Ok(Value::Array(vec![]))
-        }
+        "filter" => Ok(Value::Array(vec![])),
 
-        "each" => {
-            Ok(Value::Null)
-        }
+        "each" => Ok(Value::Null),
 
         "emit" => {
             // emit("event_name", ...args) — trigger another handler
@@ -375,16 +365,12 @@ async fn eval_builtin_with_args(
             tracing::debug!("extract() piped call");
             Ok(Value::Array(vec![]))
         }
-        "summarize" => {
-            Ok(Value::String("(summary)".into()))
-        }
+        "summarize" => Ok(Value::String("(summary)".into())),
         "filter" => {
             // filter(array, lambda) — lambda not yet evaluated
             Ok(args.first().cloned().unwrap_or(Value::Array(vec![])))
         }
-        "map" => {
-            Ok(args.first().cloned().unwrap_or(Value::Array(vec![])))
-        }
+        "map" => Ok(args.first().cloned().unwrap_or(Value::Array(vec![]))),
         "len" => match args.first() {
             Some(Value::Array(a)) => Ok(Value::Int(a.len() as i64)),
             _ => Ok(Value::Int(0)),
@@ -448,7 +434,14 @@ fn cmp_values(left: &Value, right: &Value, cmp: fn(f64, f64) -> bool) -> Value {
         (Value::Float(a), Value::Float(b)) => Value::Bool(cmp(*a, *b)),
         (Value::Int(a), Value::Float(b)) => Value::Bool(cmp(*a as f64, *b)),
         (Value::Float(a), Value::Int(b)) => Value::Bool(cmp(*a, *b as f64)),
-        (Value::String(a), Value::String(b)) => Value::Bool(a.cmp(b) == if cmp(0.0, 1.0) { std::cmp::Ordering::Less } else { std::cmp::Ordering::Greater }),
+        (Value::String(a), Value::String(b)) => Value::Bool(
+            a.cmp(b)
+                == if cmp(0.0, 1.0) {
+                    std::cmp::Ordering::Less
+                } else {
+                    std::cmp::Ordering::Greater
+                },
+        ),
         _ => Value::Bool(false),
     }
 }
