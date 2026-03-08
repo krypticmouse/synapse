@@ -1,11 +1,10 @@
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use synapse_core::ast::*;
 use tokio::sync::RwLock;
 
 use super::update;
-use super::{ExecEnv, Runtime};
+use super::ExecEnv;
 use crate::storage::StorageManager;
 
 /// Policy scheduler — runs periodic `every` rules on a timer.

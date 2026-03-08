@@ -1,6 +1,6 @@
 use synapse_core::ast::*;
 
-use super::handler::{eval_expr, exec_stmts};
+use super::handler::exec_stmts;
 use super::ExecEnv;
 use crate::storage::QueryFilter;
 use crate::value::Value;

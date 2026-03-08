@@ -2,7 +2,7 @@ use rusqlite::{params_from_iter, Connection};
 use std::path::Path;
 use std::sync::Mutex;
 
-use super::{Condition, ConditionOp, QueryFilter, StorageError, StorageResult};
+use super::{ConditionOp, QueryFilter, StorageError, StorageResult};
 use crate::value::{Record, Value};
 
 #[derive(Debug)]

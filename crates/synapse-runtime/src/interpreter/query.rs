@@ -3,7 +3,7 @@ use synapse_core::ast::*;
 use super::handler::eval_expr;
 use super::ExecEnv;
 use crate::storage::{Condition, ConditionOp, QueryFilter};
-use crate::value::{Record, Value};
+use crate::value::Value;
 
 /// Execute a query definition against storage.
 pub async fn exec_query(env: &mut ExecEnv, query: &QueryDef) -> anyhow::Result<Vec<Value>> {

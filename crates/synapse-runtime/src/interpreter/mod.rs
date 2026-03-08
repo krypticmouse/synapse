@@ -11,7 +11,7 @@ use synapse_core::ast::*;
 use tokio::sync::RwLock;
 
 use crate::storage::StorageManager;
-use crate::value::{Record, Value};
+use crate::value::Value;
 
 /// The runtime interpreter — executes DSL constructs against storage.
 /// Uses Arc<RwLock<>> for interior mutability shared across async tasks.
@@ -23,7 +23,7 @@ pub struct Runtime {
     /// Registered query definitions indexed by query name
     queries: HashMap<String, QueryDef>,
     /// Registered update definitions indexed by memory type
-    updates: HashMap<String, UpdateDef>,
+    pub updates: HashMap<String, UpdateDef>,
     /// Memory schemas: type_name -> fields
     memories: HashMap<String, Vec<FieldDef>>,
     /// Runtime state: counters, stats, etc.

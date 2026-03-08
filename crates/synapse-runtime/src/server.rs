@@ -45,12 +45,6 @@ struct EmitRequest {
     payload: serde_json::Value,
 }
 
-#[derive(Serialize)]
-struct EmitResponse {
-    success: bool,
-    message: String,
-}
-
 #[derive(Deserialize)]
 struct QueryRequest {
     query: String,
