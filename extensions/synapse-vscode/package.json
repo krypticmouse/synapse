@@ -2,8 +2,13 @@
   "name": "synapse-mnm",
   "displayName": "Synapse (.mnm) Syntax",
   "description": "Syntax highlighting for Synapse memory configuration language (.mnm)",
-  "version": "0.1.0",
-  "publisher": "synapse",
+  "version": "0.1.1",
+  "icon": "logo.png",
+  "publisher": "krypticmouse",
+  "repository": "https://github.com/krypticmouse/synapse",
+  "license": "MIT",
+  "author": "krypticmouse",
+  "bugs": "https://github.com/krypticmouse/synapse/issues",
   "engines": {
     "vscode": "^1.74.0"
   },
