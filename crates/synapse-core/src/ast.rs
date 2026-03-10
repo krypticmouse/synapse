@@ -40,6 +40,7 @@ pub struct ConfigEntry {
 pub enum ConfigValue {
     FnCall { name: String, arg: String },
     None,
+    Auto,
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -60,6 +61,10 @@ pub struct NamespaceDef {
 pub struct MemoryDef {
     pub name: String,
     pub fields: Vec<FieldDef>,
+    /// Field names to index (from standalone @index name)
+    pub indexes: Vec<String>,
+    /// Invariant expressions (from standalone @invariant expr)
+    pub invariants: Vec<Expr>,
 }
 
 #[derive(Debug, Clone)]

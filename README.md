@@ -136,6 +136,97 @@ In a separate terminal:
 
 ---
 
+## 5. Zep — `zep.mnm`
+
+Temporal knowledge graph memory: episodic events, semantic facts with subject-predicate-object triples, and entity summaries. Uses vector search (Qdrant) and graph (Neo4j) with `vector: auto` and `graph: auto`.
+
+**Requires:** Docker (for Qdrant and Neo4j auto-spawn)
+
+```bash
+./target/release/synapse apply examples/zep.mnm
+```
+
+In a separate terminal:
+
+```bash
+# End a conversation to extract episodes and facts (handler expects session_id + messages)
+./target/release/synapse emit conversation_end '{"session_id": "s1", "messages": [{"content": "Alice works at Acme Corp"}]}'
+
+# Hybrid retrieval: vector + graph
+./target/release/synapse query GetContext '{"input": "Where does Alice work?", "user_id": "u1"}'
+
+# Entity timeline
+./target/release/synapse query EntityHistory '{"entity_name": "Alice"}'
+
+# Related entities via graph
+./target/release/synapse query RelatedEntities '{"entity": "Alice"}'
+```
+
+---
+
+## 6. Letta — `letta.mnm`
+
+Tiered memory with core blocks (persona/human/system), recall (conversation history), and archival (long-term facts). Vector search only; no graph. Self-editing via `@extern` tools.
+
+**Requires:** Docker (for Qdrant auto-spawn)
+
+```bash
+./target/release/synapse apply examples/letta.mnm
+```
+
+In a separate terminal:
+
+```bash
+# Store conversation messages for recall
+./target/release/synapse emit message_received '{"role": "user", "content": "I prefer Python for data science", "session_id": "s1"}'
+./target/release/synapse emit message_received '{"role": "assistant", "content": "Noted. Python is great for data science.", "session_id": "s1"}'
+
+# Archive a fact
+./target/release/synapse emit archive_request '{"content": "User prefers Python for data science", "source": "user_stated"}'
+
+# Get core memory blocks
+./target/release/synapse query GetCoreMemory '{}'
+
+# Search recall (recent conversations)
+./target/release/synapse query SearchRecall '{"query": "data science", "session_id": null}'
+
+# Search archival memory
+./target/release/synapse query SearchArchival '{"query": "Python preferences"}'
+```
+
+---
+
+## 7. SuperMemory — `supermemory.mnm`
+
+Universal memory layer: user profiles, memory facts, document chunks, and connector sync (Notion, GDrive, GitHub). Combines conversation extraction, RAG, and scheduled connector refresh.
+
+**Requires:** Docker (for Qdrant and Neo4j auto-spawn)
+
+```bash
+./target/release/synapse apply examples/supermemory.mnm
+```
+
+In a separate terminal:
+
+```bash
+# Store conversation messages (auto-extracts facts)
+./target/release/synapse emit message '{"user_id": "u1", "content": "I use TypeScript for frontend work", "container": "user"}'
+
+# Explicit save
+./target/release/synapse emit save_memory '{"user_id": "u1", "content": "Project X uses Next.js", "container": "project"}'
+
+# Main search (memory + RAG)
+./target/release/synapse query Search '{"query": "frontend tech", "user_id": "u1", "container": null}'
+
+# Get user profile
+./target/release/synapse query GetProfile '{"user_id": "u1"}'
+
+# Temporal search
+./target/release/synapse query TemporalSearch '{"query": "TypeScript", "user_id": "u1", "as_of": null}'
+```
+
+---
+
 ## Syntax Highlighting (VS Code / Cursor)
 
 A syntax highlighter for `.mnm` files is available in `extensions/synapse-vscode/`.

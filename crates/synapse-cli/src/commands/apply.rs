@@ -1,10 +1,13 @@
 use std::fs;
+use std::path::Path;
 
 use synapse_core::ast::Item;
-use synapse_runtime::config::RuntimeConfig;
+use synapse_runtime::config::{GraphConfig, RuntimeConfig, VectorConfig};
+use synapse_runtime::storage::neo4j::Neo4jBackend;
+use synapse_runtime::storage::qdrant::QdrantBackend;
 use synapse_runtime::storage::sqlite::SqliteBackend;
 use synapse_runtime::storage::StorageBackend;
-use synapse_runtime::{Runtime, StorageManager};
+use synapse_runtime::{docker, Runtime, StorageManager};
 
 pub async fn run(file: &str, port: Option<u16>, daemon: bool) -> anyhow::Result<()> {
     println!("Applying {file}...");
@@ -27,6 +30,8 @@ pub async fn run(file: &str, port: Option<u16>, daemon: bool) -> anyhow::Result<
         config.port = p;
     }
 
+    let data_dir = Path::new(".synapse");
+
     // Set up storage
     let mut storage = StorageManager::new();
 
@@ -36,12 +41,32 @@ pub async fn run(file: &str, port: Option<u16>, daemon: bool) -> anyhow::Result<
         println!("  ✓ Connected to sqlite ({})", sc.url);
     }
 
-    if let Some(ref vc) = config.vector {
-        println!("  ✓ Qdrant configured at {} (connect on demand)", vc.url);
+    match &config.vector {
+        Some(VectorConfig::Auto) => {
+            docker::ensure_docker_available()?;
+            let url = docker::ensure_qdrant(data_dir).await?;
+            let qdrant = QdrantBackend::connect(&url).await?;
+            storage.vector = Some(StorageBackend::Qdrant(qdrant));
+            println!("  ✓ Qdrant auto-started at {url}");
+        }
+        Some(VectorConfig::External { url, .. }) => {
+            println!("  ✓ Qdrant configured at {url} (connect on demand)");
+        }
+        None => {}
     }
 
-    if let Some(ref gc) = config.graph {
-        println!("  ✓ Neo4j configured at {} (connect on demand)", gc.url);
+    match &config.graph {
+        Some(GraphConfig::Auto) => {
+            docker::ensure_docker_available()?;
+            let url = docker::ensure_neo4j(data_dir).await?;
+            let neo4j = Neo4jBackend::connect(&url).await?;
+            storage.graph = Some(StorageBackend::Neo4j(neo4j));
+            println!("  ✓ Neo4j auto-started at {url}");
+        }
+        Some(GraphConfig::External { url, .. }) => {
+            println!("  ✓ Neo4j configured at {url} (connect on demand)");
+        }
+        None => {}
     }
 
     // Build runtime

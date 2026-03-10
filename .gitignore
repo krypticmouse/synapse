@@ -25,5 +25,9 @@ target
 /target
 
 # Data directory
-/data
+*.db
+*.db-shm
+*.db-wal
 .synapse
+
+.DS_Store

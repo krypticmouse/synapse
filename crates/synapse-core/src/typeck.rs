@@ -166,6 +166,18 @@ fn check_items(env: &mut TypeEnv, items: &[Item]) {
 }
 
 fn check_memory(env: &mut TypeEnv, mem: &MemoryDef) {
+    let field_names: std::collections::HashSet<_> =
+        mem.fields.iter().map(|f| f.name.as_str()).collect();
+
+    for index_field in &mem.indexes {
+        if !field_names.contains(index_field.as_str()) {
+            env.error(format!(
+                "@index references unknown field '{}' in memory '{}'",
+                index_field, mem.name
+            ));
+        }
+    }
+
     let mut seen = std::collections::HashSet::new();
     for field in &mem.fields {
         if !seen.insert(&field.name) {

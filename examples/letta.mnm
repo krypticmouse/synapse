@@ -3,8 +3,8 @@
 
 config {
   storage: sqlite("./letta.db")
-  vector: qdrant("localhost:6333")
-  graph: none  # Letta doesn't use KG
+  vector: auto
+  graph: none
   embedding: openai("text-embedding-3-small")
   extractor: openai("gpt-4o")
 }

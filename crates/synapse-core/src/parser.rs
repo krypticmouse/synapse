@@ -59,6 +59,8 @@ fn any_name<'a>() -> impl Parser<'a, &'a [Token], String, extra::Err<Rich<'a, To
         Token::Order => "order".to_string(),
         Token::Limit => "limit".to_string(),
         Token::Policy => "policy".to_string(),
+        Token::Auto => "auto".to_string(),
+        Token::Embedded => "embedded".to_string(),
     }
 }
 
@@ -452,16 +454,22 @@ fn build_program_parser<'a>() -> impl Parser<'a, &'a [Token], Program, extra::Er
                 .map(|(name, value)| Stmt::Let { name, value })
                 .boxed();
 
-            let if_stmt = just(Token::If)
-                .ignore_then(expr.clone())
-                .then(block.clone())
-                .then(just(Token::Else).ignore_then(block.clone()).or_not())
-                .map(|((condition, then_body), else_body)| Stmt::If {
-                    condition,
-                    then_body,
-                    else_body,
-                })
-                .boxed();
+            let if_stmt = recursive(|if_stmt: Recursive<dyn Parser<'a, &'a [Token], Stmt, _>>| {
+                just(Token::If)
+                    .ignore_then(expr.clone())
+                    .then(block.clone())
+                    .then(
+                        just(Token::Else)
+                            .ignore_then(block.clone().or(if_stmt.clone().map(|s| vec![s])))
+                            .or_not(),
+                    )
+                    .map(|((condition, then_body), else_body)| Stmt::If {
+                        condition,
+                        then_body,
+                        else_body,
+                    })
+                    .boxed()
+            });
 
             let for_stmt = just(Token::For)
                 .ignore_then(ident())
@@ -496,13 +504,15 @@ fn build_program_parser<'a>() -> impl Parser<'a, &'a [Token], Program, extra::Er
 
     // ─── Config ──────────────────────────────────────────────
     let config_value = choice((
+        just(Token::Auto).to(ConfigValue::Auto),
+        just(Token::Embedded).to(ConfigValue::Auto),
+        just(Token::None).to(ConfigValue::None),
         any_name()
             .then(
                 select! { Token::StringLiteral(s) => s.clone() }
                     .delimited_by(just(Token::LParen), just(Token::RParen)),
             )
             .map(|(name, arg)| ConfigValue::FnCall { name, arg }),
-        just(Token::None).to(ConfigValue::None),
     ));
 
     let config = just(Token::Config)
@@ -543,15 +553,46 @@ fn build_program_parser<'a>() -> impl Parser<'a, &'a [Token], Program, extra::Er
             decorators,
         });
 
+    // Standalone memory-level decorators (must come before field_def in choice)
+    let standalone_index = just(Token::Index)
+        .ignore_then(any_name())
+        .map(MemoryMember::Index);
+    let standalone_invariant = just(Token::Invariant)
+        .ignore_then(expr.clone())
+        .map(MemoryMember::Invariant);
+
+    let memory_member = choice((
+        standalone_index,
+        standalone_invariant,
+        field_def.map(MemoryMember::Field),
+    ));
+
     let memory = just(Token::Memory)
         .ignore_then(ident())
         .then(
-            field_def
+            memory_member
                 .repeated()
                 .collect::<Vec<_>>()
                 .delimited_by(just(Token::LBrace), just(Token::RBrace)),
         )
-        .map(|(name, fields)| Item::Memory(MemoryDef { name, fields }))
+        .map(|(name, members)| {
+            let mut fields = Vec::new();
+            let mut indexes = Vec::new();
+            let mut invariants = Vec::new();
+            for m in members {
+                match m {
+                    MemoryMember::Field(f) => fields.push(f),
+                    MemoryMember::Index(s) => indexes.push(s),
+                    MemoryMember::Invariant(e) => invariants.push(e),
+                }
+            }
+            Item::Memory(MemoryDef {
+                name,
+                fields,
+                indexes,
+                invariants,
+            })
+        })
         .boxed();
 
     // ─── Handler ─────────────────────────────────────────────
@@ -720,6 +761,14 @@ enum PfOp {
     Idx(Expr),
 }
 
+/// Memory block member: either a field def or standalone @index/@invariant
+#[derive(Debug, Clone)]
+enum MemoryMember {
+    Field(FieldDef),
+    Index(String),
+    Invariant(Expr),
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -751,6 +800,75 @@ mod tests {
             assert_eq!(cfg.entries[0].key, "storage");
             assert_eq!(cfg.entries[2].key, "graph");
             assert!(matches!(&cfg.entries[2].value, ConfigValue::None));
+        } else {
+            panic!("expected Config");
+        }
+    }
+
+    #[test]
+    fn parse_config_with_auto() {
+        let result = parse(
+            r#"
+            config {
+                storage: sqlite("./test.db")
+                vector: auto
+                graph: auto
+            }
+        "#,
+        );
+        assert!(result.is_ok(), "error: {:?}", result.err());
+        let prog = result.unwrap();
+        if let Item::Config(cfg) = &prog.items[0] {
+            assert_eq!(cfg.entries.len(), 3);
+            assert!(matches!(&cfg.entries[1].value, ConfigValue::Auto));
+            assert!(matches!(&cfg.entries[2].value, ConfigValue::Auto));
+        } else {
+            panic!("expected Config");
+        }
+    }
+
+    #[test]
+    fn parse_config_with_auto_and_fncall() {
+        let result = parse(
+            r#"
+            config {
+                storage: sqlite("./test.db")
+                vector: auto
+                graph: auto
+                embedding: openai("text-embedding-3-small")
+                extractor: openai("gpt-4o")
+            }
+        "#,
+        );
+        assert!(result.is_ok(), "error: {:?}", result.err());
+        let prog = result.unwrap();
+        if let Item::Config(cfg) = &prog.items[0] {
+            assert_eq!(cfg.entries.len(), 5);
+            assert!(matches!(&cfg.entries[1].value, ConfigValue::Auto));
+            assert!(matches!(&cfg.entries[2].value, ConfigValue::Auto));
+            assert!(matches!(&cfg.entries[3].value, ConfigValue::FnCall { .. }));
+            assert!(matches!(&cfg.entries[4].value, ConfigValue::FnCall { .. }));
+        } else {
+            panic!("expected Config");
+        }
+    }
+
+    #[test]
+    fn parse_config_with_embedded() {
+        let result = parse(
+            r#"
+            config {
+                storage: sqlite("./test.db")
+                vector: embedded
+                graph: none
+            }
+        "#,
+        );
+        assert!(result.is_ok(), "error: {:?}", result.err());
+        let prog = result.unwrap();
+        if let Item::Config(cfg) = &prog.items[0] {
+            // embedded is treated as auto
+            assert!(matches!(&cfg.entries[1].value, ConfigValue::Auto));
         } else {
             panic!("expected Config");
         }
@@ -891,6 +1009,120 @@ mod tests {
         if let Item::Namespace(ns) = &prog.items[0] {
             assert_eq!(ns.name, "test_agent");
             assert_eq!(ns.items.len(), 1);
+        } else {
+            panic!("expected Namespace");
+        }
+    }
+
+    #[test]
+    fn parse_memory_with_standalone_index_and_invariant() {
+        let result = parse(
+            r#"
+            memory Episode {
+                session_id: string
+                messages: string[]
+                summary: string?
+                created_at: timestamp
+
+                @index session_id
+            }
+        "#,
+        );
+        assert!(result.is_ok(), "error: {:?}", result.err());
+        let prog = result.unwrap();
+        if let Item::Memory(mem) = &prog.items[0] {
+            assert_eq!(mem.name, "Episode");
+            assert_eq!(mem.fields.len(), 4);
+            assert_eq!(mem.indexes, vec!["session_id"]);
+            assert!(mem.invariants.is_empty());
+        } else {
+            panic!("expected Memory");
+        }
+    }
+
+    #[test]
+    fn parse_memory_with_standalone_invariant() {
+        let result = parse(
+            r#"
+            memory CoreBlock {
+                label: string
+                content: string
+                char_limit: int
+
+                @index label
+                @invariant content.length <= char_limit
+            }
+        "#,
+        );
+        assert!(result.is_ok(), "error: {:?}", result.err());
+        let prog = result.unwrap();
+        if let Item::Memory(mem) = &prog.items[0] {
+            assert_eq!(mem.name, "CoreBlock");
+            assert_eq!(mem.fields.len(), 3);
+            assert_eq!(mem.indexes, vec!["label"]);
+            assert_eq!(mem.invariants.len(), 1);
+        } else {
+            panic!("expected Memory");
+        }
+    }
+
+    #[test]
+    fn parse_example_files_with_standalone_decorators() {
+        // zep.mnm and supermemory.mnm use standalone @index/@invariant - verify they parse
+        let zep = parse(include_str!("../../../examples/zep.mnm"));
+        assert!(zep.is_ok(), "failed to parse zep: {:?}", zep.err());
+
+        let supermemory = parse(include_str!("../../../examples/supermemory.mnm"));
+        assert!(
+            supermemory.is_ok(),
+            "failed to parse supermemory: {:?}",
+            supermemory.err()
+        );
+    }
+
+    #[test]
+    fn parse_zep_example_structure() {
+        // Minimal structure matching zep.mnm: namespace with memories that have @index/@invariant
+        let result = parse(
+            r#"
+            namespace zep_agent {
+                memory Episode {
+                    session_id: string
+                    messages: string[]
+                    summary: string?
+                    created_at: timestamp
+                    @index session_id
+                }
+                memory Fact {
+                    content: string
+                    subject: string
+                    predicate: string
+                    object: string
+                    confidence: float[0,1]
+                    valid_from: timestamp
+                    valid_until: timestamp?
+                    superseded_by: string?
+                    @index subject
+                    @index predicate
+                    @invariant valid_from <= valid_until or valid_until == null
+                }
+            }
+        "#,
+        );
+        assert!(result.is_ok(), "error: {:?}", result.err());
+        let prog = result.unwrap();
+        if let Item::Namespace(ns) = &prog.items[0] {
+            assert_eq!(ns.name, "zep_agent");
+            assert_eq!(ns.items.len(), 2);
+            if let Item::Memory(ep) = &ns.items[0] {
+                assert_eq!(ep.name, "Episode");
+                assert_eq!(ep.indexes, vec!["session_id"]);
+            }
+            if let Item::Memory(fact) = &ns.items[1] {
+                assert_eq!(fact.name, "Fact");
+                assert_eq!(fact.indexes, vec!["subject", "predicate"]);
+                assert_eq!(fact.invariants.len(), 1);
+            }
         } else {
             panic!("expected Namespace");
         }

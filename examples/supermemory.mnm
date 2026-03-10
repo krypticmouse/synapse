@@ -3,8 +3,8 @@
 
 config {
   storage: sqlite("./supermemory.db")
-  vector: qdrant("localhost:6333")
-  graph: neo4j("bolt://localhost:7687")
+  vector: auto
+  graph: auto
   embedding: openai("text-embedding-3-small")
   extractor: openai("gpt-4o")
 }

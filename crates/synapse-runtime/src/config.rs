@@ -21,15 +21,15 @@ pub struct StorageConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct VectorConfig {
-    pub backend: String,
-    pub url: String,
+pub enum VectorConfig {
+    External { backend: String, url: String },
+    Auto,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GraphConfig {
-    pub backend: String,
-    pub url: String,
+pub enum GraphConfig {
+    External { backend: String, url: String },
+    Auto,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -73,22 +73,30 @@ impl RuntimeConfig {
                         });
                     }
                 }
-                "vector" => {
-                    if let ConfigValue::FnCall { name, arg } = &entry.value {
-                        cfg.vector = Some(VectorConfig {
+                "vector" => match &entry.value {
+                    ConfigValue::FnCall { name, arg } => {
+                        cfg.vector = Some(VectorConfig::External {
                             backend: name.clone(),
                             url: arg.clone(),
                         });
                     }
-                }
-                "graph" => {
-                    if let ConfigValue::FnCall { name, arg } = &entry.value {
-                        cfg.graph = Some(GraphConfig {
+                    ConfigValue::Auto => {
+                        cfg.vector = Some(VectorConfig::Auto);
+                    }
+                    _ => {}
+                },
+                "graph" => match &entry.value {
+                    ConfigValue::FnCall { name, arg } => {
+                        cfg.graph = Some(GraphConfig::External {
                             backend: name.clone(),
                             url: arg.clone(),
                         });
                     }
-                }
+                    ConfigValue::Auto => {
+                        cfg.graph = Some(GraphConfig::Auto);
+                    }
+                    _ => {}
+                },
                 "embedding" => {
                     if let ConfigValue::FnCall { name, arg } = &entry.value {
                         cfg.embedding = Some(EmbeddingConfig {
