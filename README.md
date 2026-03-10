@@ -1,6 +1,16 @@
-# Synapse
+<div align='center'>
+<img width="768" alt="logo" src="imgs/synapse_logo.png" />
 
-Configuration Language for Memory Systems
+# Synapse
+<em>Configuration Language for Memory Systems</em>
+
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+[![Rust](https://img.shields.io/badge/rust-1.70+-orange.svg)](https://www.rust-lang.org)
+[![Build Status](https://img.shields.io/badge/build-passing-green.svg)](#)
+
+[Examples](examples) • [Issues](https://github.com/krypticmouse/synapse/issues)
+
+</div>
 
 ---
 
