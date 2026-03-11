@@ -2,7 +2,7 @@ use synapse_core::ast::*;
 
 use super::handler::eval_expr;
 use super::ExecEnv;
-use crate::storage::{Condition, ConditionOp, QueryFilter};
+use crate::storage::{Condition, ConditionOp, CypherQuery, GraphMatch, QueryFilter};
 use crate::value::Value;
 
 /// Execute a query definition against storage.
@@ -26,9 +26,9 @@ pub async fn exec_query(env: &mut ExecEnv, query: &QueryDef) -> anyhow::Result<V
         }
     }
 
-    // Process where clause into conditions
+    // Process where clause into conditions (including graph filters)
     if let Some(ref where_expr) = body.where_clause {
-        extract_conditions(env, where_expr, &mut filter.conditions).await;
+        extract_conditions(env, where_expr, &mut filter).await;
     }
 
     // Query each source type and combine results
@@ -43,11 +43,10 @@ pub async fn exec_query(env: &mut ExecEnv, query: &QueryDef) -> anyhow::Result<V
     Ok(all_results)
 }
 
-/// Extract simple field-comparison conditions from a where clause expression.
-/// Complex conditions (semantic_match, graph_match) are currently passed through.
-async fn extract_conditions(env: &mut ExecEnv, expr: &Expr, conditions: &mut Vec<Condition>) {
+/// Extract conditions from a where clause expression into the QueryFilter.
+/// Handles simple field comparisons, graph_match(), and cypher() calls.
+async fn extract_conditions(env: &mut ExecEnv, expr: &Expr, filter: &mut QueryFilter) {
     match expr {
-        // field == value
         Expr::Binary { left, op, right } => {
             let cond_op = match op {
                 BinOp::Eq => Some(ConditionOp::Eq),
@@ -57,9 +56,8 @@ async fn extract_conditions(env: &mut ExecEnv, expr: &Expr, conditions: &mut Vec
                 BinOp::Gt => Some(ConditionOp::Gt),
                 BinOp::Ge => Some(ConditionOp::Ge),
                 BinOp::And => {
-                    // Recurse into both sides
-                    Box::pin(extract_conditions(env, left, conditions)).await;
-                    Box::pin(extract_conditions(env, right, conditions)).await;
+                    Box::pin(extract_conditions(env, left, filter)).await;
+                    Box::pin(extract_conditions(env, right, filter)).await;
                     return;
                 }
                 _ => None,
@@ -67,7 +65,7 @@ async fn extract_conditions(env: &mut ExecEnv, expr: &Expr, conditions: &mut Vec
 
             if let (Some(op), Expr::Ident(field)) = (cond_op, left.as_ref()) {
                 if let Ok(val) = eval_expr(env, right).await {
-                    conditions.push(Condition {
+                    filter.conditions.push(Condition {
                         field: field.clone(),
                         op,
                         value: val,
@@ -75,8 +73,74 @@ async fn extract_conditions(env: &mut ExecEnv, expr: &Expr, conditions: &mut Vec
                 }
             }
         }
-        // Function calls like semantic_match(), graph_match() are handled
-        // at query time by the storage backends, not as filter conditions
+
+        Expr::Call { func, args } => {
+            if let Expr::Ident(name) = func.as_ref() {
+                match name.as_str() {
+                    "graph_match" => {
+                        let input = if let Some(arg) = args.first() {
+                            eval_expr(env, &arg.value)
+                                .await
+                                .ok()
+                                .and_then(|v| v.as_str().map(|s| s.to_string()))
+                                .unwrap_or_default()
+                        } else {
+                            String::new()
+                        };
+
+                        let hops = args.iter().find_map(|a| {
+                            if a.name.as_deref() == Some("hops") {
+                                if let Expr::Int(n) = &a.value {
+                                    return Some(*n as usize);
+                                }
+                            }
+                            None
+                        }).unwrap_or(2);
+
+                        filter.graph_match = Some(GraphMatch { input, hops });
+                    }
+
+                    "cypher" => {
+                        if let Some(arg) = args.first() {
+                            if let Expr::Str(query_str) = &arg.value {
+                                let mut params = std::collections::HashMap::new();
+                                for a in args.iter().skip(1) {
+                                    if let Some(ref pname) = a.name {
+                                        if let Ok(val) = eval_expr(env, &a.value).await {
+                                            if let Some(s) = val.as_str() {
+                                                params.insert(pname.clone(), s.to_string());
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // Also pull in query params from env scope
+                                // (e.g. query GetX(entity: string) — `entity` is in scope)
+                                let query_str_owned = query_str.clone();
+                                for word in query_str_owned.split('$') {
+                                    if let Some(param_name) = word.split(|c: char| !c.is_alphanumeric() && c != '_').next() {
+                                        if !param_name.is_empty() && !params.contains_key(param_name) {
+                                            let val = env.get(param_name);
+                                            if let Some(s) = val.as_str() {
+                                                params.insert(param_name.to_string(), s.to_string());
+                                            }
+                                        }
+                                    }
+                                }
+
+                                filter.cypher_query = Some(CypherQuery {
+                                    query: query_str.clone(),
+                                    params,
+                                });
+                            }
+                        }
+                    }
+
+                    _ => {}
+                }
+            }
+        }
+
         _ => {}
     }
 }

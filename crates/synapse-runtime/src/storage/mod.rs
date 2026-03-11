@@ -74,6 +74,8 @@ pub struct QueryFilter {
     pub conditions: Vec<Condition>,
     pub order_by: Option<(String, bool)>, // (field, ascending)
     pub limit: Option<usize>,
+    pub graph_match: Option<GraphMatch>,
+    pub cypher_query: Option<CypherQuery>,
 }
 
 #[derive(Debug, Clone)]
@@ -93,6 +95,20 @@ pub enum ConditionOp {
     Ge,
 }
 
+/// Graph traversal filter: find records connected within N hops of the input.
+#[derive(Debug, Clone)]
+pub struct GraphMatch {
+    pub input: String,
+    pub hops: usize,
+}
+
+/// Raw Cypher query to execute against the graph backend.
+#[derive(Debug, Clone)]
+pub struct CypherQuery {
+    pub query: String,
+    pub params: std::collections::HashMap<String, String>,
+}
+
 /// Combined storage manager — holds all active backends.
 #[derive(Debug)]
 pub struct StorageManager {
@@ -110,21 +126,56 @@ impl StorageManager {
         }
     }
 
-    /// Store a record across all configured backends
+    /// Store a record across all configured backends.
+    /// SQLite gets all records. Qdrant gets records for embedding.
+    /// Neo4j gets the node and, if the record has subject/predicate/object
+    /// fields, also creates a relationship triple.
     pub async fn store(&self, record: &Record) -> StorageResult<()> {
         if let Some(ref r) = self.relational {
             r.store(record).await?;
         }
-        // Vector and graph backends can store embeddings/triplets
-        // independently when configured
+        if let Some(ref v) = self.vector {
+            v.store(record).await?;
+        }
+        if let Some(StorageBackend::Neo4j(ref neo)) = self.graph {
+            neo.store(record).await?;
+            neo.store_triple(record).await?;
+        }
         Ok(())
     }
 
+    /// Query with multi-backend support.
+    /// 1. If graph conditions exist and a graph backend is configured,
+    ///    run the graph query first to get candidate IDs.
+    /// 2. Query relational with those IDs as an additional filter.
     pub async fn query(&self, type_name: &str, filter: &QueryFilter) -> StorageResult<Vec<Record>> {
-        if let Some(ref r) = self.relational {
-            return r.query(type_name, filter).await;
+        let mut graph_ids: Option<std::collections::HashSet<String>> = None;
+
+        if let Some(StorageBackend::Neo4j(ref neo)) = self.graph {
+            if let Some(ref gm) = filter.graph_match {
+                let ids = neo.graph_match_ids(type_name, &gm.input, gm.hops).await?;
+                graph_ids = Some(ids);
+            }
+            if let Some(ref cq) = filter.cypher_query {
+                let ids = neo.cypher_query_ids(&cq.query, &cq.params).await?;
+                match graph_ids {
+                    Some(ref mut existing) => existing.retain(|id| ids.contains(id)),
+                    None => graph_ids = Some(ids),
+                }
+            }
         }
-        Ok(vec![])
+
+        let mut results = if let Some(ref r) = self.relational {
+            r.query(type_name, filter).await?
+        } else {
+            vec![]
+        };
+
+        if let Some(ref ids) = graph_ids {
+            results.retain(|r| ids.contains(&r.id));
+        }
+
+        Ok(results)
     }
 
     pub async fn get(&self, type_name: &str, id: &str) -> StorageResult<Option<Record>> {

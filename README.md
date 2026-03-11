@@ -219,20 +219,26 @@ Universal memory layer: user profiles, memory facts, document chunks, and connec
 In a separate terminal:
 
 ```bash
-# Store conversation messages (auto-extracts facts)
+# Store conversation messages (auto-extracts facts + builds graph)
 ./target/release/synapse emit message '{"user_id": "u1", "content": "I use TypeScript for frontend work", "container": "user"}'
 
-# Explicit save
-./target/release/synapse emit save_memory '{"user_id": "u1", "content": "Project X uses Next.js", "container": "project"}'
+# Explicit save with subject/predicate/object triple
+./target/release/synapse emit save_memory '{"user_id": "u1", "content": "Project X uses Next.js", "container": "project", "subject": "Project X", "predicate": "uses", "object": "Next.js"}'
 
 # Main search (memory + RAG)
 ./target/release/synapse query Search '{"query": "frontend tech", "user_id": "u1", "container": null}'
 
+# Graph-powered search: find memories connected within 2 hops
+./target/release/synapse query GraphSearch '{"query": "Next.js", "user_id": "u1"}'
+
+# Hybrid: vector + graph connectivity
+./target/release/synapse query DeepSearch '{"query": "frontend frameworks", "user_id": "u1"}'
+
+# Related entities via Cypher
+./target/release/synapse query RelatedEntities '{"topic": "Next.js"}'
+
 # Get user profile
 ./target/release/synapse query GetProfile '{"user_id": "u1"}'
-
-# Temporal search
-./target/release/synapse query TemporalSearch '{"query": "TypeScript", "user_id": "u1", "as_of": null}'
 ```
 
 ---

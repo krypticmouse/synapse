@@ -194,6 +194,151 @@ impl Neo4jBackend {
         Ok(records)
     }
 
+    /// If the record has subject, predicate, and object fields,
+    /// create (or merge) a relationship triple in the graph:
+    ///   (subject_entity)-[:PREDICATE]->(object_entity)
+    /// Both subject and object become Entity nodes; the record itself
+    /// is linked to both via HAS_FACT edges.
+    pub async fn store_triple(&self, record: &Record) -> StorageResult<()> {
+        let graph = self
+            .graph
+            .as_ref()
+            .ok_or_else(|| StorageError::NotConnected("neo4j".into()))?;
+
+        let subject = match record.fields.get("subject") {
+            Some(crate::value::Value::String(s)) if !s.is_empty() => s.clone(),
+            _ => return Ok(()),
+        };
+        let predicate = match record.fields.get("predicate") {
+            Some(crate::value::Value::String(s)) if !s.is_empty() => s.clone(),
+            _ => return Ok(()),
+        };
+        let object = match record.fields.get("object") {
+            Some(crate::value::Value::String(s)) if !s.is_empty() => s.clone(),
+            _ => return Ok(()),
+        };
+
+        let rel_type = predicate
+            .to_uppercase()
+            .replace(' ', "_")
+            .replace('-', "_");
+
+        let cypher = format!(
+            "MERGE (s:Entity {{name: $subject}}) \
+             MERGE (o:Entity {{name: $object}}) \
+             MERGE (s)-[r:{rel_type}]->(o) \
+             SET r.predicate = $predicate \
+             WITH s, o \
+             MATCH (f:{} {{_id: $fact_id}}) \
+             MERGE (s)-[:HAS_FACT]->(f) \
+             MERGE (o)-[:HAS_FACT]->(f)",
+            record.type_name
+        );
+
+        let query = neo4rs::query(&cypher)
+            .param("subject", subject)
+            .param("object", object)
+            .param("predicate", predicate)
+            .param("fact_id", record.id.clone());
+
+        graph
+            .run(query)
+            .await
+            .map_err(|e| StorageError::Neo4j(e.to_string()))?;
+
+        tracing::debug!(
+            type_name = %record.type_name,
+            id = %record.id,
+            "stored graph triple"
+        );
+
+        Ok(())
+    }
+
+    /// Find record IDs connected to the input entity within N hops.
+    /// Searches Entity nodes whose name contains the input, then
+    /// traverses up to `hops` relationship levels to find connected
+    /// fact nodes.
+    pub async fn graph_match_ids(
+        &self,
+        type_name: &str,
+        input: &str,
+        hops: usize,
+    ) -> StorageResult<std::collections::HashSet<String>> {
+        let graph = self
+            .graph
+            .as_ref()
+            .ok_or_else(|| StorageError::NotConnected("neo4j".into()))?;
+
+        let cypher = format!(
+            "MATCH (e:Entity) \
+             WHERE toLower(e.name) CONTAINS toLower($input) \
+             MATCH (e)-[*1..{hops}]-(related) \
+             WHERE related:{type_name} \
+             RETURN DISTINCT related._id AS id"
+        );
+
+        let query = neo4rs::query(&cypher).param("input", input.to_string());
+
+        let mut result = graph
+            .execute(query)
+            .await
+            .map_err(|e| StorageError::Neo4j(e.to_string()))?;
+
+        let mut ids = std::collections::HashSet::new();
+        while let Some(row) = result
+            .next()
+            .await
+            .map_err(|e| StorageError::Neo4j(e.to_string()))?
+        {
+            if let Ok(id) = row.get::<String>("id") {
+                ids.insert(id);
+            }
+        }
+
+        Ok(ids)
+    }
+
+    /// Execute a raw Cypher query and collect returned `name` or `_id` values
+    /// as a set of IDs for filtering.
+    pub async fn cypher_query_ids(
+        &self,
+        cypher: &str,
+        params: &std::collections::HashMap<String, String>,
+    ) -> StorageResult<std::collections::HashSet<String>> {
+        let graph = self
+            .graph
+            .as_ref()
+            .ok_or_else(|| StorageError::NotConnected("neo4j".into()))?;
+
+        let mut query = neo4rs::query(cypher);
+        for (k, v) in params {
+            query = query.param(k.as_str(), v.clone());
+        }
+
+        let mut result = graph
+            .execute(query)
+            .await
+            .map_err(|e| StorageError::Neo4j(e.to_string()))?;
+
+        let mut ids = std::collections::HashSet::new();
+        while let Some(row) = result
+            .next()
+            .await
+            .map_err(|e| StorageError::Neo4j(e.to_string()))?
+        {
+            if let Ok(id) = row.get::<String>("_id") {
+                ids.insert(id);
+            } else if let Ok(name) = row.get::<String>("name") {
+                ids.insert(name);
+            } else if let Ok(id) = row.get::<String>("id") {
+                ids.insert(id);
+            }
+        }
+
+        Ok(ids)
+    }
+
     pub async fn update(&self, record: &Record) -> StorageResult<()> {
         self.store(record).await
     }

@@ -16,6 +16,9 @@ namespace supermemory {
   # Atomic facts extracted from conversations
   memory MemoryFact {
     content: string
+    subject: string         # Entity the fact is about
+    predicate: string       # Relationship type
+    object: string          # Related entity or value
     user_id: string
     container: string       # Scope: "user", "project", "org"
     source_type: string     # "conversation", "document", "connector"
@@ -28,6 +31,7 @@ namespace supermemory {
     @index user_id
     @index container
     @index source_type
+    @index subject
   }
 
   # User profile: stable facts + dynamic context
@@ -74,12 +78,15 @@ namespace supermemory {
 
   # === HANDLERS ===
 
-  # On conversation message, extract and store
+  # On conversation message, extract facts and build graph
   on message(user_id: string, content: string, container: string) {
     content
       |> extract()
       |> map(f => MemoryFact {
         content: f.content,
+        subject: f.subject,
+        predicate: f.predicate,
+        object: f.object,
         user_id: user_id,
         container: container,
         source_type: "conversation",
@@ -91,9 +98,12 @@ namespace supermemory {
   }
 
   # Explicit save request from user
-  on save_memory(user_id: string, content: string, container: string) {
+  on save_memory(user_id: string, content: string, container: string, subject: string, predicate: string, object: string) {
     store(MemoryFact {
       content: content,
+      subject: subject,
+      predicate: predicate,
+      object: object,
       user_id: user_id,
       container: container,
       source_type: "explicit",
@@ -164,6 +174,35 @@ namespace supermemory {
     from MemoryFact
     where regex(content, pattern)
       and user_id == user_id
+    limit 20
+  }
+
+  # Graph-powered: find memories connected to the input within 2 hops
+  query GraphSearch(query: string, user_id: string): MemoryFact[] {
+    from MemoryFact
+    where graph_match(query, hops: 2)
+      and user_id == user_id
+    order by confidence desc
+    limit 15
+  }
+
+  # Hybrid: vector similarity + graph connectivity
+  query DeepSearch(query: string, user_id: string): MemoryFact[] {
+    from MemoryFact
+    where semantic_match(query, threshold: 0.5)
+      and graph_match(query, hops: 3)
+      and user_id == user_id
+    order by confidence desc
+    limit 10
+  }
+
+  # Raw Cypher: find all entities related to a topic
+  query RelatedEntities(topic: string): MemoryFact[] {
+    from MemoryFact
+    where cypher("
+      MATCH (e:Entity {name: $topic})-[*1..2]-(related:Entity)-[:HAS_FACT]->(f:MemoryFact)
+      RETURN DISTINCT f._id AS id
+    ")
     limit 20
   }
 
