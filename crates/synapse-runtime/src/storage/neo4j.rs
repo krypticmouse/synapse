@@ -125,35 +125,31 @@ impl Neo4jBackend {
 
         let mut cypher = format!("MATCH (n:{type_name})");
 
-        if !filter.conditions.is_empty() {
-            let clauses: Vec<String> = filter
-                .conditions
-                .iter()
-                .map(|c| {
-                    if matches!(c.value, crate::value::Value::Null) {
-                        return match c.op {
-                            super::ConditionOp::Eq => format!("n.{} IS NULL", c.field),
-                            super::ConditionOp::Ne => format!("n.{} IS NOT NULL", c.field),
-                            _ => format!("n.{} = null", c.field),
-                        };
-                    }
-                    let op = match c.op {
-                        super::ConditionOp::Eq => "=",
-                        super::ConditionOp::Ne => "<>",
-                        super::ConditionOp::Lt => "<",
-                        super::ConditionOp::Le => "<=",
-                        super::ConditionOp::Gt => ">",
-                        super::ConditionOp::Ge => ">=",
-                    };
-                    format!(
-                        "n.{} {} '{}'",
-                        c.field,
-                        op,
-                        value_to_cypher_string(&c.value)
-                    )
-                })
-                .collect();
-            cypher.push_str(&format!(" WHERE {}", clauses.join(" AND ")));
+        let has_and = !filter.conditions.is_empty();
+        let has_or = !filter.or_conditions.is_empty();
+
+        if has_and || has_or {
+            let mut where_parts: Vec<String> = Vec::new();
+
+            if has_and {
+                let clauses: Vec<String> = filter
+                    .conditions
+                    .iter()
+                    .map(|c| condition_to_cypher(c))
+                    .collect();
+                where_parts.push(clauses.join(" AND "));
+            }
+
+            if has_or {
+                let or_clauses: Vec<String> = filter
+                    .or_conditions
+                    .iter()
+                    .map(|c| condition_to_cypher(c))
+                    .collect();
+                where_parts.push(format!("({})", or_clauses.join(" OR ")));
+            }
+
+            cypher.push_str(&format!(" WHERE {}", where_parts.join(" AND ")));
         }
 
         cypher.push_str(" RETURN n");
@@ -227,9 +223,16 @@ impl Neo4jBackend {
 
         let rel_type = predicate.to_uppercase().replace(' ', "_").replace('-', "_");
 
+        let sub_id = uuid::Uuid::new_v4().to_string();
+        let obj_id = uuid::Uuid::new_v4().to_string();
+
         let cypher = format!(
             "MERGE (s:Entity {{name: $subject}}) \
+             ON CREATE SET s._id = $sub_id \
+             ON MATCH SET s._id = coalesce(s._id, $sub_id) \
              MERGE (o:Entity {{name: $object}}) \
+             ON CREATE SET o._id = $obj_id \
+             ON MATCH SET o._id = coalesce(o._id, $obj_id) \
              MERGE (s)-[r:{rel_type}]->(o) \
              SET r.predicate = $predicate \
              WITH s, o \
@@ -243,7 +246,9 @@ impl Neo4jBackend {
             .param("subject", subject)
             .param("object", object)
             .param("predicate", predicate)
-            .param("fact_id", record.id.clone());
+            .param("fact_id", record.id.clone())
+            .param("sub_id", sub_id)
+            .param("obj_id", obj_id);
 
         graph
             .run(query)
@@ -305,6 +310,9 @@ impl Neo4jBackend {
 
     /// Execute a raw Cypher query and collect returned `name` or `_id` values
     /// as a set of IDs for filtering.
+    /// Run a Cypher query and return matching record IDs.
+    /// Also looks up the _id for nodes returned by name so that ID-based
+    /// filtering in the query pipeline works correctly.
     pub async fn cypher_query_ids(
         &self,
         cypher: &str,
@@ -314,6 +322,8 @@ impl Neo4jBackend {
             .graph
             .as_ref()
             .ok_or_else(|| StorageError::NotConnected("neo4j".into()))?;
+
+        tracing::info!(cypher = %cypher, params = ?params, "executing cypher_query_ids");
 
         let mut query = neo4rs::query(cypher);
         for (k, v) in params {
@@ -326,6 +336,8 @@ impl Neo4jBackend {
             .map_err(|e| StorageError::Neo4j(e.to_string()))?;
 
         let mut ids = std::collections::HashSet::new();
+        let mut names_to_resolve: Vec<String> = Vec::new();
+
         while let Some(row) = result
             .next()
             .await
@@ -334,12 +346,39 @@ impl Neo4jBackend {
             if let Ok(id) = row.get::<String>("_id") {
                 ids.insert(id);
             } else if let Ok(name) = row.get::<String>("name") {
-                ids.insert(name);
+                names_to_resolve.push(name);
             } else if let Ok(id) = row.get::<String>("id") {
                 ids.insert(id);
             }
         }
 
+        // Resolve names to _id values by looking up nodes
+        for name in &names_to_resolve {
+            let lookup = neo4rs::query("MATCH (n {name: $name}) RETURN n._id AS _id")
+                .param("name", name.clone());
+            match graph.execute(lookup).await {
+                Ok(mut rows) => {
+                    let mut found = false;
+                    while let Ok(Some(row)) = rows.next().await {
+                        if let Ok(id) = row.get::<String>("_id") {
+                            tracing::info!(name = %name, resolved_id = %id, "cypher: resolved name to _id");
+                            ids.insert(id);
+                            found = true;
+                        }
+                    }
+                    if !found {
+                        tracing::warn!(name = %name, "cypher: could not resolve name to _id, using name as fallback");
+                        ids.insert(name.clone());
+                    }
+                }
+                Err(e) => {
+                    tracing::error!(name = %name, error = %e, "cypher: name resolution query failed");
+                    ids.insert(name.clone());
+                }
+            }
+        }
+
+        tracing::info!(count = ids.len(), ids = ?ids, "cypher_query_ids final result");
         Ok(ids)
     }
 
@@ -386,6 +425,30 @@ impl Neo4jBackend {
     pub fn url(&self) -> &str {
         &self.url
     }
+}
+
+fn condition_to_cypher(c: &super::Condition) -> String {
+    if matches!(c.value, crate::value::Value::Null) {
+        return match c.op {
+            super::ConditionOp::Eq => format!("n.{} IS NULL", c.field),
+            super::ConditionOp::Ne => format!("n.{} IS NOT NULL", c.field),
+            _ => format!("n.{} = null", c.field),
+        };
+    }
+    let op = match c.op {
+        super::ConditionOp::Eq => "=",
+        super::ConditionOp::Ne => "<>",
+        super::ConditionOp::Lt => "<",
+        super::ConditionOp::Le => "<=",
+        super::ConditionOp::Gt => ">",
+        super::ConditionOp::Ge => ">=",
+    };
+    format!(
+        "n.{} {} '{}'",
+        c.field,
+        op,
+        value_to_cypher_string(&c.value)
+    )
 }
 
 fn value_to_cypher_string(value: &crate::value::Value) -> String {

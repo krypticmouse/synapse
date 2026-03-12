@@ -75,6 +75,8 @@ impl StorageBackend {
 #[derive(Debug, Clone, Default)]
 pub struct QueryFilter {
     pub conditions: Vec<Condition>,
+    /// Conditions joined by OR (at least one must match).
+    pub or_conditions: Vec<Condition>,
     pub order_by: Option<(String, bool)>, // (field, ascending)
     pub limit: Option<usize>,
     pub graph_match: Option<GraphMatch>,
@@ -192,11 +194,19 @@ impl StorageManager {
     ) -> StorageResult<Vec<Record>> {
         let mut results = Vec::new();
 
-        // Try graph backend first (it stores richer record data)
+        // Try graph backend first (it stores richer record data).
+        // Match by _id or by name field (for Cypher queries that return names).
         if let Some(ref g) = self.graph {
             let all = g.query(type_name, &QueryFilter::default()).await?;
             for r in all {
-                if ids.contains(&r.id) {
+                let id_match = ids.contains(&r.id);
+                let name_match = r
+                    .fields
+                    .get("name")
+                    .and_then(|v| v.as_str())
+                    .map(|n| ids.contains(n))
+                    .unwrap_or(false);
+                if id_match || name_match {
                     results.push(r);
                 }
             }
@@ -207,7 +217,14 @@ impl StorageManager {
             if let Some(ref v) = self.vector {
                 let all = v.query(type_name, &QueryFilter::default()).await?;
                 for r in all {
-                    if ids.contains(&r.id) {
+                    let id_match = ids.contains(&r.id);
+                    let name_match = r
+                        .fields
+                        .get("name")
+                        .and_then(|v| v.as_str())
+                        .map(|n| ids.contains(n))
+                        .unwrap_or(false);
+                    if id_match || name_match {
                         results.push(r);
                     }
                 }
@@ -273,9 +290,19 @@ impl StorageManager {
             Some((field, asc)) if field == "_score" => Some(*asc),
             _ => None,
         };
-        let filter = if score_order.is_some() {
+
+        let has_candidate_backends =
+            filter.graph_match.is_some() || filter.semantic_match.is_some() || filter.cypher_query.is_some();
+
+        // When graph/semantic backends will produce candidate IDs, defer limit
+        // to after filtering + scoring so the relational backend doesn't
+        // prematurely truncate results.
+        let deferred_limit = if has_candidate_backends { filter.limit } else { None };
+
+        let filter = if score_order.is_some() || has_candidate_backends {
             &QueryFilter {
-                order_by: None,
+                order_by: if score_order.is_some() { None } else { filter.order_by.clone() },
+                limit: if has_candidate_backends { None } else { filter.limit },
                 ..filter.clone()
             }
         } else {
@@ -436,6 +463,10 @@ impl StorageManager {
                     ord.reverse()
                 }
             });
+        }
+
+        if let Some(limit) = deferred_limit {
+            results.truncate(limit);
         }
 
         Ok(results)

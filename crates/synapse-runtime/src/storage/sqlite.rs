@@ -130,34 +130,31 @@ impl SqliteBackend {
         let mut sql = format!("SELECT * FROM {type_name}");
         let mut bind_values: Vec<rusqlite::types::Value> = vec![];
 
-        if !filter.conditions.is_empty() {
-            let clauses: Vec<String> = filter
-                .conditions
-                .iter()
-                .map(|c| {
-                    if matches!(c.value, Value::Null) {
-                        return match c.op {
-                            ConditionOp::Eq => format!("{} IS NULL", c.field),
-                            ConditionOp::Ne => format!("{} IS NOT NULL", c.field),
-                            _ => {
-                                bind_values.push(value_to_sqlite(&c.value));
-                                format!("{} = ?", c.field)
-                            }
-                        };
-                    }
-                    let op = match c.op {
-                        ConditionOp::Eq => "=",
-                        ConditionOp::Ne => "!=",
-                        ConditionOp::Lt => "<",
-                        ConditionOp::Le => "<=",
-                        ConditionOp::Gt => ">",
-                        ConditionOp::Ge => ">=",
-                    };
-                    bind_values.push(value_to_sqlite(&c.value));
-                    format!("{} {} ?", c.field, op)
-                })
-                .collect();
-            sql.push_str(&format!(" WHERE {}", clauses.join(" AND ")));
+        let has_and = !filter.conditions.is_empty();
+        let has_or = !filter.or_conditions.is_empty();
+
+        if has_and || has_or {
+            let mut where_parts: Vec<String> = Vec::new();
+
+            if has_and {
+                let clauses: Vec<String> = filter
+                    .conditions
+                    .iter()
+                    .map(|c| condition_to_sql(c, &mut bind_values))
+                    .collect();
+                where_parts.push(clauses.join(" AND "));
+            }
+
+            if has_or {
+                let or_clauses: Vec<String> = filter
+                    .or_conditions
+                    .iter()
+                    .map(|c| condition_to_sql(c, &mut bind_values))
+                    .collect();
+                where_parts.push(format!("({})", or_clauses.join(" OR ")));
+            }
+
+            sql.push_str(&format!(" WHERE {}", where_parts.join(" AND ")));
         }
 
         if let Some((field, asc)) = &filter.order_by {
@@ -255,6 +252,29 @@ impl SqliteBackend {
         }
         Ok(results)
     }
+}
+
+fn condition_to_sql(c: &super::Condition, bind_values: &mut Vec<rusqlite::types::Value>) -> String {
+    if matches!(c.value, Value::Null) {
+        return match c.op {
+            ConditionOp::Eq => format!("{} IS NULL", c.field),
+            ConditionOp::Ne => format!("{} IS NOT NULL", c.field),
+            _ => {
+                bind_values.push(value_to_sqlite(&c.value));
+                format!("{} = ?", c.field)
+            }
+        };
+    }
+    let op = match c.op {
+        ConditionOp::Eq => "=",
+        ConditionOp::Ne => "!=",
+        ConditionOp::Lt => "<",
+        ConditionOp::Le => "<=",
+        ConditionOp::Gt => ">",
+        ConditionOp::Ge => ">=",
+    };
+    bind_values.push(value_to_sqlite(&c.value));
+    format!("{} {} ?", c.field, op)
 }
 
 fn sql_type(synapse_type: &str) -> &str {

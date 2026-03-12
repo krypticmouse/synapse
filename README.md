@@ -160,16 +160,43 @@ In a separate terminal:
 
 ```bash
 # End a conversation to extract episodes and facts (handler expects session_id + messages)
-./target/release/synapse emit conversation_end '{"session_id": "s1", "messages": [{"content": "Alice works at Acme Corp"}]}'
+# Short example:
+./target/release/synapse emit conversation_end '{"session_id": "s1", "messages": [{"role": "user", "content": "Alice works at Acme Corp"}]}'
 
-# Hybrid retrieval: vector + graph
-./target/release/synapse query GetContext '{"input": "Where does Alice work?", "user_id": "u1"}'
+# Longer message chain (multi-turn conversation):
+# Or: ./target/release/synapse emit conversation_end "$(cat examples/zep_long_conversation.json)"
+./target/release/synapse emit conversation_end '{
+  "session_id": "s1",
+  "messages": [
+    {"role": "user", "content": "Where does Alice work?"},
+    {"role": "assistant", "content": "Alice works at Acme Corp as a senior engineer."},
+    {"role": "user", "content": "Who is her manager?"},
+    {"role": "assistant", "content": "Bob is her manager at Acme Corp."},
+    {"role": "user", "content": "What projects is she on?"},
+    {"role": "assistant", "content": "She leads the Phoenix API project and contributes to Atlas."},
+    {"role": "user", "content": "When did she join?"},
+    {"role": "assistant", "content": "Alice joined Acme in March 2022."},
+    {"role": "user", "content": "Does Bob report to anyone?"},
+    {"role": "assistant", "content": "Yes, Bob reports to Carol, the VP of Engineering."}
+  ]
+}'
 
-# Entity timeline
+# Hybrid retrieval: semantic + graph, ranked by relevance
+./target/release/synapse query GetContext '{"input": "Where does Alice work?"}'
+./target/release/synapse query GetContext '{"input": "Who is the manager of Alice?"}'
+./target/release/synapse query GetContext '{"input": "What projects does Alice lead?"}'
+
+# Entity timeline (all facts about an entity, chronological)
 ./target/release/synapse query EntityHistory '{"entity_name": "Alice"}'
 
-# Related entities via graph
+# Complex graph query: entities connected to Alice within 2 hops
 ./target/release/synapse query RelatedEntities '{"entity": "Alice"}'
+
+# Inspect all backends
+./target/release/synapse inspect
+
+# Clear all data
+./target/release/synapse clear
 ```
 
 ---

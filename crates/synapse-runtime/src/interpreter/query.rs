@@ -59,6 +59,17 @@ async fn extract_conditions(env: &mut ExecEnv, expr: &Expr, filter: &mut QueryFi
                     Box::pin(extract_conditions(env, right, filter)).await;
                     return;
                 }
+                BinOp::Or => {
+                    let mut left_filter = QueryFilter::default();
+                    let mut right_filter = QueryFilter::default();
+                    Box::pin(extract_conditions(env, left, &mut left_filter)).await;
+                    Box::pin(extract_conditions(env, right, &mut right_filter)).await;
+                    filter.or_conditions.extend(left_filter.conditions);
+                    filter.or_conditions.extend(right_filter.conditions);
+                    filter.or_conditions.extend(left_filter.or_conditions);
+                    filter.or_conditions.extend(right_filter.or_conditions);
+                    return;
+                }
                 _ => None,
             };
 
