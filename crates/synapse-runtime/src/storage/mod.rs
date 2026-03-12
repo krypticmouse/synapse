@@ -343,8 +343,7 @@ impl StorageManager {
         let candidate_ids: Option<std::collections::HashSet<String>> =
             match (&graph_ids, &semantic_ids) {
                 (Some(g), Some(s)) => {
-                    let union: std::collections::HashSet<String> =
-                        g.union(s).cloned().collect();
+                    let union: std::collections::HashSet<String> = g.union(s).cloned().collect();
                     tracing::debug!(
                         graph = g.len(),
                         semantic = s.len(),
@@ -420,10 +419,22 @@ impl StorageManager {
         // Apply _score ordering in memory (since it's a virtual field)
         if let Some(asc) = score_order {
             results.sort_by(|a, b| {
-                let sa = a.fields.get("_score").and_then(|v| v.as_f64()).unwrap_or(0.0);
-                let sb = b.fields.get("_score").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                let sa = a
+                    .fields
+                    .get("_score")
+                    .and_then(|v| v.as_f64())
+                    .unwrap_or(0.0);
+                let sb = b
+                    .fields
+                    .get("_score")
+                    .and_then(|v| v.as_f64())
+                    .unwrap_or(0.0);
                 let ord = sa.partial_cmp(&sb).unwrap_or(std::cmp::Ordering::Equal);
-                if asc { ord } else { ord.reverse() }
+                if asc {
+                    ord
+                } else {
+                    ord.reverse()
+                }
             });
         }
 
