@@ -45,7 +45,11 @@ impl LlmClient {
     /// Extract structured facts from free text via LLM.
     /// Returns a `Vec<Value::Record>` with fields: content, subject, predicate, object, confidence.
     pub async fn extract(&self, text: &str) -> anyhow::Result<Vec<Value>> {
-        let agent = self.client.agent(&self.model).preamble(EXTRACT_PREAMBLE).build();
+        let agent = self
+            .client
+            .agent(&self.model)
+            .preamble(EXTRACT_PREAMBLE)
+            .build();
 
         let response = agent.prompt(text).await?;
         let json_str = strip_code_fences(&response);
@@ -167,7 +171,9 @@ impl EmbeddingClient {
     /// Compute cosine similarity between two texts.
     pub async fn similarity(&self, text_a: &str, text_b: &str) -> anyhow::Result<f64> {
         let model = self.client.embedding_model(&self.model_name);
-        let results = model.embed_texts(vec![text_a.to_string(), text_b.to_string()]).await?;
+        let results = model
+            .embed_texts(vec![text_a.to_string(), text_b.to_string()])
+            .await?;
         if results.len() < 2 {
             return Ok(0.0);
         }

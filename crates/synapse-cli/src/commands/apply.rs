@@ -78,7 +78,10 @@ pub async fn run(file: &str, port: Option<u16>, daemon: bool) -> anyhow::Result<
     let llm = match &config.extractor {
         Some(ext_cfg) => {
             let client = LlmClient::from_config(ext_cfg)?;
-            println!("  ✓ LLM extractor configured ({}/{})", ext_cfg.provider, ext_cfg.model);
+            println!(
+                "  ✓ LLM extractor configured ({}/{})",
+                ext_cfg.provider, ext_cfg.model
+            );
             Some(client)
         }
         None => None,
@@ -88,7 +91,10 @@ pub async fn run(file: &str, port: Option<u16>, daemon: bool) -> anyhow::Result<
     let embedder = match &config.embedding {
         Some(emb_cfg) => {
             let client = EmbeddingClient::from_config(emb_cfg)?;
-            println!("  ✓ Embedding model configured ({}/{})", emb_cfg.provider, emb_cfg.model);
+            println!(
+                "  ✓ Embedding model configured ({}/{})",
+                emb_cfg.provider, emb_cfg.model
+            );
             Some(std::sync::Arc::new(client))
         }
         None => None,
@@ -103,8 +109,7 @@ pub async fn run(file: &str, port: Option<u16>, daemon: bool) -> anyhow::Result<
     }
 
     // Build runtime
-    let runtime = Runtime::new(program, storage, llm, embedder)
-        .with_source_file(file);
+    let runtime = Runtime::new(program, storage, llm, embedder).with_source_file(file);
     runtime.init_storage().await?;
 
     // Start policy scheduler

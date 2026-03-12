@@ -113,8 +113,7 @@ async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
     let is_apply = matches!(cli.command, Command::Apply { .. });
-    let filter =
-        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
     let console_layer = fmt::layer();
 
     let file_layer = if is_apply {
@@ -145,9 +144,11 @@ async fn main() -> anyhow::Result<()> {
         Command::Plan { file } => commands::plan::run(&file),
         Command::Apply { file, port, daemon } => commands::apply::run(&file, port, daemon).await,
         Command::Status => commands::status::run().await,
-        Command::Inspect { backend, memory, compact } => {
-            commands::inspect::run(backend.as_deref(), memory.as_deref(), compact).await
-        }
+        Command::Inspect {
+            backend,
+            memory,
+            compact,
+        } => commands::inspect::run(backend.as_deref(), memory.as_deref(), compact).await,
         Command::Clear => commands::clear::run().await,
         Command::Reload => commands::reload::run().await,
         Command::Logs { follow, level } => commands::logs::run(follow, level.as_deref()),

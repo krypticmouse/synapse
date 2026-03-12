@@ -151,7 +151,13 @@ impl Runtime {
             .ok_or_else(|| anyhow::anyhow!("unknown event: {event}"))?
             .clone();
 
-        let mut env = ExecEnv::new(self.storage.clone(), self.llm.clone(), self.embedder.clone(), self.handlers.clone(), self.extern_fns.clone());
+        let mut env = ExecEnv::new(
+            self.storage.clone(),
+            self.llm.clone(),
+            self.embedder.clone(),
+            self.handlers.clone(),
+            self.extern_fns.clone(),
+        );
 
         // Bind handler parameters from the payload
         if let serde_json::Value::Object(map) = &payload {
@@ -186,7 +192,13 @@ impl Runtime {
             .ok_or_else(|| anyhow::anyhow!("unknown query: {name}"))?
             .clone();
 
-        let mut env = ExecEnv::new(self.storage.clone(), self.llm.clone(), self.embedder.clone(), self.handlers.clone(), self.extern_fns.clone());
+        let mut env = ExecEnv::new(
+            self.storage.clone(),
+            self.llm.clone(),
+            self.embedder.clone(),
+            self.handlers.clone(),
+            self.extern_fns.clone(),
+        );
 
         // Bind query parameters
         if let serde_json::Value::Object(map) = &params {

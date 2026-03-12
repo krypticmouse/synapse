@@ -295,10 +295,7 @@ async fn eval_call(env: &mut ExecEnv, func: &Expr, args: &[CallArg]) -> anyhow::
         },
 
         "extract" => {
-            let text = arg_values
-                .first()
-                .map(value_to_text)
-                .unwrap_or_default();
+            let text = arg_values.first().map(value_to_text).unwrap_or_default();
             if let Some(ref llm) = env.llm {
                 match llm.extract(&text).await {
                     Ok(facts) => Ok(Value::Array(facts)),
@@ -314,10 +311,7 @@ async fn eval_call(env: &mut ExecEnv, func: &Expr, args: &[CallArg]) -> anyhow::
         }
 
         "summarize" => {
-            let text = arg_values
-                .first()
-                .map(value_to_text)
-                .unwrap_or_default();
+            let text = arg_values.first().map(value_to_text).unwrap_or_default();
             if let Some(ref llm) = env.llm {
                 match llm.summarize(&text).await {
                     Ok(summary) => Ok(Value::String(summary)),
@@ -515,7 +509,10 @@ async fn eval_call(env: &mut ExecEnv, func: &Expr, args: &[CallArg]) -> anyhow::
                         .as_ref()
                         .map(|t| format!("{t:?}"))
                         .unwrap_or_else(|| "any".into());
-                    match llm.call_extern(func_name, &params, &return_type, &arg_values).await {
+                    match llm
+                        .call_extern(func_name, &params, &return_type, &arg_values)
+                        .await
+                    {
                         Ok(val) => return Ok(val),
                         Err(e) => {
                             tracing::error!(error = %e, "extern fn {func_name} LLM call failed");
@@ -587,7 +584,10 @@ async fn eval_piped_call(
                 Expr::Ident(n) => n.as_str(),
                 _ => return Ok(Value::Null),
             };
-            if !matches!(name, "map" | "filter" | "each" | "group_by" | "store_as" | "delete_originals") {
+            if !matches!(
+                name,
+                "map" | "filter" | "each" | "group_by" | "store_as" | "delete_originals"
+            ) {
                 let mut arg_values = vec![left_val.clone()];
                 for arg in args {
                     arg_values.push(eval_expr(env, &arg.value).await?);
@@ -609,7 +609,8 @@ async fn eval_piped_call(
                 })
                 .unwrap_or("id");
 
-            let mut groups: std::collections::HashMap<String, Vec<Value>> = std::collections::HashMap::new();
+            let mut groups: std::collections::HashMap<String, Vec<Value>> =
+                std::collections::HashMap::new();
             for item in arr {
                 let key = match &item {
                     Value::Record(r) => r
@@ -749,10 +750,7 @@ async fn eval_builtin_with_args(
             Ok(Value::Null)
         }
         "extract" => {
-            let text = args
-                .first()
-                .map(value_to_text)
-                .unwrap_or_default();
+            let text = args.first().map(value_to_text).unwrap_or_default();
             if let Some(ref llm) = env.llm {
                 match llm.extract(&text).await {
                     Ok(facts) => Ok(Value::Array(facts)),
@@ -767,10 +765,7 @@ async fn eval_builtin_with_args(
             }
         }
         "summarize" => {
-            let text = args
-                .first()
-                .map(value_to_text)
-                .unwrap_or_default();
+            let text = args.first().map(value_to_text).unwrap_or_default();
             if let Some(ref llm) = env.llm {
                 match llm.summarize(&text).await {
                     Ok(summary) => Ok(Value::String(summary)),

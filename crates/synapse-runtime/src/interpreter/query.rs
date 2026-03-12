@@ -87,14 +87,17 @@ async fn extract_conditions(env: &mut ExecEnv, expr: &Expr, filter: &mut QueryFi
                             String::new()
                         };
 
-                        let hops = args.iter().find_map(|a| {
-                            if a.name.as_deref() == Some("hops") {
-                                if let Expr::Int(n) = &a.value {
-                                    return Some(*n as usize);
+                        let hops = args
+                            .iter()
+                            .find_map(|a| {
+                                if a.name.as_deref() == Some("hops") {
+                                    if let Expr::Int(n) = &a.value {
+                                        return Some(*n as usize);
+                                    }
                                 }
-                            }
-                            None
-                        }).unwrap_or(2);
+                                None
+                            })
+                            .unwrap_or(2);
 
                         filter.graph_match = Some(GraphMatch { input, hops });
                     }
@@ -117,11 +120,17 @@ async fn extract_conditions(env: &mut ExecEnv, expr: &Expr, filter: &mut QueryFi
                                 // (e.g. query GetX(entity: string) — `entity` is in scope)
                                 let query_str_owned = query_str.clone();
                                 for word in query_str_owned.split('$') {
-                                    if let Some(param_name) = word.split(|c: char| !c.is_alphanumeric() && c != '_').next() {
-                                        if !param_name.is_empty() && !params.contains_key(param_name) {
+                                    if let Some(param_name) = word
+                                        .split(|c: char| !c.is_alphanumeric() && c != '_')
+                                        .next()
+                                    {
+                                        if !param_name.is_empty()
+                                            && !params.contains_key(param_name)
+                                        {
                                             let val = env.get(param_name);
                                             if let Some(s) = val.as_str() {
-                                                params.insert(param_name.to_string(), s.to_string());
+                                                params
+                                                    .insert(param_name.to_string(), s.to_string());
                                             }
                                         }
                                     }
@@ -146,19 +155,23 @@ async fn extract_conditions(env: &mut ExecEnv, expr: &Expr, filter: &mut QueryFi
                             String::new()
                         };
 
-                        let threshold = args.iter().find_map(|a| {
-                            if a.name.as_deref() == Some("threshold") {
-                                match &a.value {
-                                    synapse_core::ast::Expr::Float(f) => Some(*f),
-                                    synapse_core::ast::Expr::Int(n) => Some(*n as f64),
-                                    _ => None,
+                        let threshold = args
+                            .iter()
+                            .find_map(|a| {
+                                if a.name.as_deref() == Some("threshold") {
+                                    match &a.value {
+                                        synapse_core::ast::Expr::Float(f) => Some(*f),
+                                        synapse_core::ast::Expr::Int(n) => Some(*n as f64),
+                                        _ => None,
+                                    }
+                                } else {
+                                    None
                                 }
-                            } else {
-                                None
-                            }
-                        }).unwrap_or(0.7);
+                            })
+                            .unwrap_or(0.7);
 
-                        filter.semantic_match = Some(crate::storage::SemanticMatch { input, threshold });
+                        filter.semantic_match =
+                            Some(crate::storage::SemanticMatch { input, threshold });
                     }
 
                     "regex" => {

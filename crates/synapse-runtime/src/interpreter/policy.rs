@@ -68,7 +68,13 @@ impl PolicyScheduler {
                         break;
                     }
 
-                    let mut env = ExecEnv::new(storage.clone(), llm.clone(), embedder.clone(), handlers.clone(), extern_fns.clone());
+                    let mut env = ExecEnv::new(
+                        storage.clone(),
+                        llm.clone(),
+                        embedder.clone(),
+                        handlers.clone(),
+                        extern_fns.clone(),
+                    );
                     if let Err(e) = update::exec_every(&mut env, &update_def).await {
                         tracing::error!(
                             error = %e,

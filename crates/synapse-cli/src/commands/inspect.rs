@@ -48,7 +48,10 @@ pub async fn run(backend: Option<&str>, memory: Option<&str>, compact: bool) -> 
                         }
                     }
 
-                    let count = table_data.get("count").and_then(|v| v.as_u64()).unwrap_or(0);
+                    let count = table_data
+                        .get("count")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(0);
 
                     if let Some(err) = table_data.get("error") {
                         println!("  ├─ {} (error: {})", table_name, err);

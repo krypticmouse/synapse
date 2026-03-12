@@ -232,12 +232,18 @@ impl StorageManager {
                 let va = a.fields.get(field);
                 let vb = b.fields.get(field);
                 let ord = match (va, vb) {
-                    (Some(Value::Float(fa)), Some(Value::Float(fb))) => fa.partial_cmp(fb).unwrap_or(std::cmp::Ordering::Equal),
+                    (Some(Value::Float(fa)), Some(Value::Float(fb))) => {
+                        fa.partial_cmp(fb).unwrap_or(std::cmp::Ordering::Equal)
+                    }
                     (Some(Value::Int(ia)), Some(Value::Int(ib))) => ia.cmp(ib),
                     (Some(Value::String(sa)), Some(Value::String(sb))) => sa.cmp(sb),
                     _ => std::cmp::Ordering::Equal,
                 };
-                if asc { ord } else { ord.reverse() }
+                if asc {
+                    ord
+                } else {
+                    ord.reverse()
+                }
             });
         }
 
@@ -246,7 +252,11 @@ impl StorageManager {
             results.truncate(limit);
         }
 
-        tracing::debug!(count = results.len(), "fetched {} records from alternate backends", results.len());
+        tracing::debug!(
+            count = results.len(),
+            "fetched {} records from alternate backends",
+            results.len()
+        );
         Ok(results)
     }
 
@@ -281,7 +291,10 @@ impl StorageManager {
                     match embedder.embed(&sm.input).await {
                         Ok(vector) => {
                             let limit = filter.limit.unwrap_or(20);
-                            match qdrant.search_by_vector(type_name, vector, limit, sm.threshold).await {
+                            match qdrant
+                                .search_by_vector(type_name, vector, limit, sm.threshold)
+                                .await
+                            {
                                 Ok(ids) => {
                                     tracing::debug!(count = ids.len(), input = %sm.input, "semantic_match returned IDs: {:?}", ids);
                                     semantic_ids = Some(ids);
@@ -300,17 +313,23 @@ impl StorageManager {
         }
 
         // Intersect graph and semantic candidate IDs
-        let candidate_ids: Option<std::collections::HashSet<String>> = match (&graph_ids, &semantic_ids) {
-            (Some(g), Some(s)) => {
-                let intersection: std::collections::HashSet<String> =
-                    g.intersection(s).cloned().collect();
-                tracing::debug!(graph = g.len(), semantic = s.len(), intersection = intersection.len(), "intersected candidate IDs");
-                Some(intersection)
-            }
-            (Some(g), None) => Some(g.clone()),
-            (None, Some(s)) => Some(s.clone()),
-            (None, None) => None,
-        };
+        let candidate_ids: Option<std::collections::HashSet<String>> =
+            match (&graph_ids, &semantic_ids) {
+                (Some(g), Some(s)) => {
+                    let intersection: std::collections::HashSet<String> =
+                        g.intersection(s).cloned().collect();
+                    tracing::debug!(
+                        graph = g.len(),
+                        semantic = s.len(),
+                        intersection = intersection.len(),
+                        "intersected candidate IDs"
+                    );
+                    Some(intersection)
+                }
+                (Some(g), None) => Some(g.clone()),
+                (None, Some(s)) => Some(s.clone()),
+                (None, None) => None,
+            };
 
         tracing::debug!(type_name = %type_name, conditions = ?filter.conditions, limit = ?filter.limit, "query filter");
 
@@ -326,18 +345,29 @@ impl StorageManager {
             vec![]
         };
 
-        tracing::debug!(count = results.len(), "relational query returned {} records", results.len());
+        tracing::debug!(
+            count = results.len(),
+            "relational query returned {} records",
+            results.len()
+        );
 
         if let Some(ref ids) = candidate_ids {
             if results.is_empty() {
                 // Relational backend has no data — fall back to fetching records
                 // from graph or vector backends using candidate IDs.
-                tracing::debug!(candidates = ids.len(), "relational empty, fetching from alternate backends");
+                tracing::debug!(
+                    candidates = ids.len(),
+                    "relational empty, fetching from alternate backends"
+                );
                 results = self.fetch_records_by_ids(type_name, ids, filter).await?;
             } else {
                 let before = results.len();
                 results.retain(|r| ids.contains(&r.id));
-                tracing::debug!(before = before, after = results.len(), "filtered relational results by candidate IDs");
+                tracing::debug!(
+                    before = before,
+                    after = results.len(),
+                    "filtered relational results by candidate IDs"
+                );
             }
         }
 
@@ -397,7 +427,9 @@ impl StorageManager {
             for name in memory_names {
                 match sqlite.clear(name).await {
                     Ok(()) => cleared.push(name.to_string()),
-                    Err(e) => tracing::warn!(table = name, error = %e, "failed to clear SQLite table"),
+                    Err(e) => {
+                        tracing::warn!(table = name, error = %e, "failed to clear SQLite table")
+                    }
                 }
             }
             report.insert("sqlite".into(), serde_json::json!(cleared));
@@ -408,7 +440,9 @@ impl StorageManager {
             for name in memory_names {
                 match qdrant.clear(name).await {
                     Ok(()) => cleared.push(name.to_string()),
-                    Err(e) => tracing::warn!(collection = name, error = %e, "failed to clear Qdrant collection"),
+                    Err(e) => {
+                        tracing::warn!(collection = name, error = %e, "failed to clear Qdrant collection")
+                    }
                 }
             }
             report.insert("qdrant".into(), serde_json::json!(cleared));
@@ -419,7 +453,9 @@ impl StorageManager {
             for name in memory_names {
                 match neo.clear(name).await {
                     Ok(()) => cleared.push(name.to_string()),
-                    Err(e) => tracing::warn!(label = name, error = %e, "failed to clear Neo4j label"),
+                    Err(e) => {
+                        tracing::warn!(label = name, error = %e, "failed to clear Neo4j label")
+                    }
                 }
             }
             // Also clear Entity nodes
@@ -439,7 +475,9 @@ impl StorageManager {
         if let Some(StorageBackend::Sqlite(ref sqlite)) = self.relational {
             sqlite.raw_sql(sql)
         } else {
-            Err(StorageError::NotConnected("no relational backend for raw SQL".into()))
+            Err(StorageError::NotConnected(
+                "no relational backend for raw SQL".into(),
+            ))
         }
     }
 
@@ -457,15 +495,21 @@ impl StorageManager {
                             .into_iter()
                             .map(|r| serde_json::Value::from(Value::Record(r)))
                             .collect();
-                        tables.insert(name.to_string(), serde_json::json!({
-                            "count": rows.len(),
-                            "records": rows,
-                        }));
+                        tables.insert(
+                            name.to_string(),
+                            serde_json::json!({
+                                "count": rows.len(),
+                                "records": rows,
+                            }),
+                        );
                     }
                     Err(e) => {
-                        tables.insert(name.to_string(), serde_json::json!({
-                            "error": e.to_string(),
-                        }));
+                        tables.insert(
+                            name.to_string(),
+                            serde_json::json!({
+                                "error": e.to_string(),
+                            }),
+                        );
                     }
                 }
             }
@@ -485,15 +529,21 @@ impl StorageManager {
                             .into_iter()
                             .map(|r| serde_json::Value::from(Value::Record(r)))
                             .collect();
-                        collections.insert(name.to_string(), serde_json::json!({
-                            "count": rows.len(),
-                            "records": rows,
-                        }));
+                        collections.insert(
+                            name.to_string(),
+                            serde_json::json!({
+                                "count": rows.len(),
+                                "records": rows,
+                            }),
+                        );
                     }
                     Err(e) => {
-                        collections.insert(name.to_string(), serde_json::json!({
-                            "error": e.to_string(),
-                        }));
+                        collections.insert(
+                            name.to_string(),
+                            serde_json::json!({
+                                "error": e.to_string(),
+                            }),
+                        );
                     }
                 }
             }
@@ -513,15 +563,21 @@ impl StorageManager {
                             .into_iter()
                             .map(|r| serde_json::Value::from(Value::Record(r)))
                             .collect();
-                        nodes.insert(name.to_string(), serde_json::json!({
-                            "count": rows.len(),
-                            "records": rows,
-                        }));
+                        nodes.insert(
+                            name.to_string(),
+                            serde_json::json!({
+                                "count": rows.len(),
+                                "records": rows,
+                            }),
+                        );
                     }
                     Err(e) => {
-                        nodes.insert(name.to_string(), serde_json::json!({
-                            "error": e.to_string(),
-                        }));
+                        nodes.insert(
+                            name.to_string(),
+                            serde_json::json!({
+                                "error": e.to_string(),
+                            }),
+                        );
                     }
                 }
             }
@@ -532,10 +588,13 @@ impl StorageManager {
                     .into_iter()
                     .map(|r| serde_json::Value::from(Value::Record(r)))
                     .collect();
-                nodes.insert("Entity".to_string(), serde_json::json!({
-                    "count": rows.len(),
-                    "records": rows,
-                }));
+                nodes.insert(
+                    "Entity".to_string(),
+                    serde_json::json!({
+                        "count": rows.len(),
+                        "records": rows,
+                    }),
+                );
             }
             result["neo4j"] = serde_json::Value::Object(nodes);
         } else {

@@ -225,10 +225,7 @@ impl Neo4jBackend {
             _ => return Ok(()),
         };
 
-        let rel_type = predicate
-            .to_uppercase()
-            .replace(' ', "_")
-            .replace('-', "_");
+        let rel_type = predicate.to_uppercase().replace(' ', "_").replace('-', "_");
 
         let cypher = format!(
             "MERGE (s:Entity {{name: $subject}}) \
@@ -376,9 +373,7 @@ impl Neo4jBackend {
             .as_ref()
             .ok_or_else(|| StorageError::NotConnected("neo4j".into()))?;
 
-        let query = neo4rs::query(&format!(
-            "MATCH (n:{type_name}) DETACH DELETE n"
-        ));
+        let query = neo4rs::query(&format!("MATCH (n:{type_name}) DETACH DELETE n"));
 
         graph
             .run(query)

@@ -206,7 +206,9 @@ impl QdrantBackend {
                     continue;
                 }
                 if let Some(s) = v.as_str() {
-                    record.fields.insert(k.clone(), Value::String(s.to_string()));
+                    record
+                        .fields
+                        .insert(k.clone(), Value::String(s.to_string()));
                 } else if let Some(n) = v.as_integer() {
                     record.fields.insert(k.clone(), Value::Int(n));
                 } else if let Some(f) = v.as_double() {
@@ -221,11 +223,7 @@ impl QdrantBackend {
         }
     }
 
-    pub async fn query(
-        &self,
-        type_name: &str,
-        filter: &QueryFilter,
-    ) -> StorageResult<Vec<Record>> {
+    pub async fn query(&self, type_name: &str, filter: &QueryFilter) -> StorageResult<Vec<Record>> {
         let client = self
             .client
             .as_ref()
@@ -256,7 +254,9 @@ impl QdrantBackend {
                     continue;
                 }
                 if let Some(s) = v.as_str() {
-                    record.fields.insert(k.clone(), Value::String(s.to_string()));
+                    record
+                        .fields
+                        .insert(k.clone(), Value::String(s.to_string()));
                 } else if let Some(n) = v.as_integer() {
                     record.fields.insert(k.clone(), Value::Int(n));
                 } else if let Some(f) = v.as_double() {
@@ -288,12 +288,9 @@ impl QdrantBackend {
         use qdrant_client::qdrant::{DeletePointsBuilder, PointsIdsList};
 
         client
-            .delete_points(
-                DeletePointsBuilder::new(type_name)
-                    .points(PointsIdsList {
-                        ids: vec![id.to_string().into()],
-                    }),
-            )
+            .delete_points(DeletePointsBuilder::new(type_name).points(PointsIdsList {
+                ids: vec![id.to_string().into()],
+            }))
             .await
             .map_err(|e| StorageError::Qdrant(e.to_string()))?;
 
@@ -311,9 +308,7 @@ impl QdrantBackend {
 
         // Empty filter matches all points
         client
-            .delete_points(
-                DeletePointsBuilder::new(type_name).points(Filter::default()),
-            )
+            .delete_points(DeletePointsBuilder::new(type_name).points(Filter::default()))
             .await
             .map_err(|e| StorageError::Qdrant(e.to_string()))?;
 
