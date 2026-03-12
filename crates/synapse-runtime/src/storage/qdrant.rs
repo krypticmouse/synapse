@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use super::{QueryFilter, StorageError, StorageResult};
@@ -124,27 +124,35 @@ impl QdrantBackend {
         }
 
         let point = PointStruct::new(record.id.clone(), vector, payload);
-        client
-            .upsert_points(UpsertPointsBuilder::new(&record.type_name, vec![point]))
-            .await
-            .map_err(|e| StorageError::Qdrant(e.to_string()))?;
-
-        tracing::debug!(
+        tracing::info!(
             type_name = %record.type_name,
             id = %record.id,
-            "stored vector in qdrant"
+            "upserting point to qdrant"
+        );
+        let resp = client
+            .upsert_points(UpsertPointsBuilder::new(&record.type_name, vec![point]))
+            .await
+            .map_err(|e| {
+                tracing::error!(error = %e, type_name = %record.type_name, id = %record.id, "qdrant upsert FAILED");
+                StorageError::Qdrant(e.to_string())
+            })?;
+        tracing::info!(
+            type_name = %record.type_name,
+            id = %record.id,
+            status = ?resp.result.map(|r| r.status),
+            "qdrant upsert response"
         );
         Ok(())
     }
 
-    /// Search by vector similarity, returning IDs of matching records.
+    /// Search by vector similarity, returning (id, score) pairs.
     pub async fn search_by_vector(
         &self,
         type_name: &str,
         vector: Vec<f32>,
         limit: usize,
         threshold: f64,
-    ) -> StorageResult<HashSet<String>> {
+    ) -> StorageResult<Vec<(String, f32)>> {
         let client = self
             .client
             .as_ref()
@@ -161,18 +169,19 @@ impl QdrantBackend {
             .await
             .map_err(|e| StorageError::Qdrant(e.to_string()))?;
 
-        let ids: HashSet<String> = results
+        let scored: Vec<(String, f32)> = results
             .result
             .iter()
             .filter_map(|point| {
-                point
+                let id = point
                     .payload
                     .get("_id")
-                    .and_then(|v| v.as_str().map(|s| s.to_string()))
+                    .and_then(|v| v.as_str().map(|s| s.to_string()))?;
+                Some((id, point.score))
             })
             .collect();
 
-        Ok(ids)
+        Ok(scored)
     }
 
     pub async fn get(&self, type_name: &str, id: &str) -> StorageResult<Option<Record>> {

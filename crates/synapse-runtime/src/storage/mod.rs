@@ -267,6 +267,21 @@ impl StorageManager {
     /// If relational is empty/unavailable, fall back to fetching records
     /// directly from whichever backend has them (graph or vector).
     pub async fn query(&self, type_name: &str, filter: &QueryFilter) -> StorageResult<Vec<Record>> {
+        // If ordering by _score (virtual field), strip it from the filter
+        // so backends don't choke, and apply it in memory after scoring.
+        let score_order = match &filter.order_by {
+            Some((field, asc)) if field == "_score" => Some(*asc),
+            _ => None,
+        };
+        let filter = if score_order.is_some() {
+            &QueryFilter {
+                order_by: None,
+                ..filter.clone()
+            }
+        } else {
+            filter
+        };
+
         let mut graph_ids: Option<std::collections::HashSet<String>> = None;
 
         if let Some(StorageBackend::Neo4j(ref neo)) = self.graph {
@@ -285,6 +300,8 @@ impl StorageManager {
         }
 
         let mut semantic_ids: Option<std::collections::HashSet<String>> = None;
+        let mut semantic_scores: std::collections::HashMap<String, f32> =
+            std::collections::HashMap::new();
         if let Some(StorageBackend::Qdrant(ref qdrant)) = self.vector {
             if let Some(ref sm) = filter.semantic_match {
                 if let Some(ref embedder) = self.embedder {
@@ -295,12 +312,21 @@ impl StorageManager {
                                 .search_by_vector(type_name, vector, limit, sm.threshold)
                                 .await
                             {
-                                Ok(ids) => {
-                                    tracing::debug!(count = ids.len(), input = %sm.input, "semantic_match returned IDs: {:?}", ids);
-                                    semantic_ids = Some(ids);
+                                Ok(scored) => {
+                                    tracing::debug!(count = scored.len(), input = %sm.input, "semantic_match returned {} results", scored.len());
+                                    if !scored.is_empty() {
+                                        let mut ids = std::collections::HashSet::new();
+                                        for (id, score) in scored {
+                                            ids.insert(id.clone());
+                                            semantic_scores.insert(id, score);
+                                        }
+                                        semantic_ids = Some(ids);
+                                    } else {
+                                        tracing::debug!("semantic_match returned 0 results, treating as unconstrained");
+                                    }
                                 }
                                 Err(e) => {
-                                    tracing::error!(error = %e, "semantic search failed");
+                                    tracing::error!(error = %e, "semantic search failed, proceeding without");
                                 }
                             }
                         }
@@ -312,19 +338,20 @@ impl StorageManager {
             }
         }
 
-        // Intersect graph and semantic candidate IDs
+        // Union graph and semantic candidate IDs — either backend can
+        // contribute relevant results rather than requiring both to agree.
         let candidate_ids: Option<std::collections::HashSet<String>> =
             match (&graph_ids, &semantic_ids) {
                 (Some(g), Some(s)) => {
-                    let intersection: std::collections::HashSet<String> =
-                        g.intersection(s).cloned().collect();
+                    let union: std::collections::HashSet<String> =
+                        g.union(s).cloned().collect();
                     tracing::debug!(
                         graph = g.len(),
                         semantic = s.len(),
-                        intersection = intersection.len(),
-                        "intersected candidate IDs"
+                        union = union.len(),
+                        "unioned candidate IDs"
                     );
-                    Some(intersection)
+                    Some(union)
                 }
                 (Some(g), None) => Some(g.clone()),
                 (None, Some(s)) => Some(s.clone()),
@@ -378,6 +405,25 @@ impl StorageManager {
                     .and_then(|v| v.as_str())
                     .map(|s| re.is_match(s))
                     .unwrap_or(false)
+            });
+        }
+
+        // Attach _score from semantic search to each record
+        if !semantic_scores.is_empty() {
+            for r in &mut results {
+                if let Some(&score) = semantic_scores.get(&r.id) {
+                    r.set("_score", Value::Float(score as f64));
+                }
+            }
+        }
+
+        // Apply _score ordering in memory (since it's a virtual field)
+        if let Some(asc) = score_order {
+            results.sort_by(|a, b| {
+                let sa = a.fields.get("_score").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                let sb = b.fields.get("_score").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                let ord = sa.partial_cmp(&sb).unwrap_or(std::cmp::Ordering::Equal);
+                if asc { ord } else { ord.reverse() }
             });
         }
 
