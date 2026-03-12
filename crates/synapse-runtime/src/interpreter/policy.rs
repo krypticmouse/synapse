@@ -17,6 +17,7 @@ pub struct PolicyScheduler {
     embedder: Option<Arc<EmbeddingClient>>,
     handlers: Arc<HashMap<String, HandlerDef>>,
     extern_fns: Arc<HashMap<String, ExternFnDef>>,
+    queries: Arc<HashMap<String, QueryDef>>,
     running: Arc<RwLock<bool>>,
 }
 
@@ -28,6 +29,7 @@ impl PolicyScheduler {
         embedder: Option<Arc<EmbeddingClient>>,
         handlers: Arc<HashMap<String, HandlerDef>>,
         extern_fns: Arc<HashMap<String, ExternFnDef>>,
+        queries: Arc<HashMap<String, QueryDef>>,
     ) -> Self {
         let mut periodic_rules = Vec::new();
 
@@ -40,6 +42,7 @@ impl PolicyScheduler {
             embedder,
             handlers,
             extern_fns,
+            queries,
             running: Arc::new(RwLock::new(false)),
         }
     }
@@ -55,6 +58,7 @@ impl PolicyScheduler {
             let embedder = self.embedder.clone();
             let handlers = self.handlers.clone();
             let extern_fns = self.extern_fns.clone();
+            let queries = self.queries.clone();
             let running = self.running.clone();
             let interval = std::time::Duration::from_secs(*interval_secs);
             let update_def = update_def.clone();
@@ -74,7 +78,8 @@ impl PolicyScheduler {
                         embedder.clone(),
                         handlers.clone(),
                         extern_fns.clone(),
-                    );
+                    )
+                    .with_queries(queries.clone());
                     if let Err(e) = update::exec_every(&mut env, &update_def).await {
                         tracing::error!(
                             error = %e,

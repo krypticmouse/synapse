@@ -131,7 +131,7 @@ namespace zep_agent {
   update Entity {
     every 6h {
       # Regenerate summaries from current facts
-      let facts = query_facts(name)
+      let facts = EntityHistory(name)
       summary = facts |> summarize()
       fact_count = facts |> len()
       last_updated = now()

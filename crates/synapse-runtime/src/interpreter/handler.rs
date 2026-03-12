@@ -497,6 +497,31 @@ async fn eval_call(env: &mut ExecEnv, func: &Expr, args: &[CallArg]) -> anyhow::
         }
 
         _ => {
+            // Try invoking a named query defined in the DSL
+            if let Some(query_def) = env.queries.get(func_name).cloned() {
+                let mut child_env = ExecEnv::new(
+                    env.storage.clone(),
+                    env.llm.clone(),
+                    env.embedder.clone(),
+                    env.handlers.clone(),
+                    env.extern_fns.clone(),
+                )
+                .with_queries(env.queries.clone());
+
+                for (param, val) in query_def.params.iter().zip(arg_values.iter()) {
+                    child_env.set(&param.name, val.clone());
+                }
+
+                match super::query::exec_query(&mut child_env, &query_def).await {
+                    Ok(results) => return Ok(Value::Array(results)),
+                    Err(e) => {
+                        tracing::error!(error = %e, query = func_name, "query call failed");
+                        return Ok(Value::Array(vec![]));
+                    }
+                }
+            }
+
+            // Try extern fn via LLM
             if let Some(ref llm) = env.llm {
                 if let Some(ext_fn) = env.extern_fns.get(func_name) {
                     let params: Vec<(String, String)> = ext_fn

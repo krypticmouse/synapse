@@ -24,7 +24,7 @@ pub struct Runtime {
     /// Registered handler definitions indexed by event name
     pub handlers: Arc<HashMap<String, HandlerDef>>,
     /// Registered query definitions indexed by query name
-    queries: HashMap<String, QueryDef>,
+    pub queries: Arc<HashMap<String, QueryDef>>,
     /// Registered update definitions indexed by memory type
     pub updates: HashMap<String, UpdateDef>,
     /// Memory schemas: type_name -> fields
@@ -72,7 +72,7 @@ impl Runtime {
             embedder,
             program,
             handlers: Arc::new(handlers),
-            queries,
+            queries: Arc::new(queries),
             updates,
             memories,
             extern_fns: Arc::new(extern_fns),
@@ -118,7 +118,7 @@ impl Runtime {
 
         self.program = program;
         self.handlers = Arc::new(handlers);
-        self.queries = queries;
+        self.queries = Arc::new(queries);
         self.updates = updates;
         self.memories = memories;
         self.extern_fns = Arc::new(extern_fns);
@@ -157,7 +157,8 @@ impl Runtime {
             self.embedder.clone(),
             self.handlers.clone(),
             self.extern_fns.clone(),
-        );
+        )
+        .with_queries(self.queries.clone());
 
         // Bind handler parameters from the payload
         if let serde_json::Value::Object(map) = &payload {
@@ -198,7 +199,8 @@ impl Runtime {
             self.embedder.clone(),
             self.handlers.clone(),
             self.extern_fns.clone(),
-        );
+        )
+        .with_queries(self.queries.clone());
 
         // Bind query parameters
         if let serde_json::Value::Object(map) = &params {
@@ -243,6 +245,7 @@ pub struct ExecEnv {
     pub embedder: Option<Arc<EmbeddingClient>>,
     pub handlers: Arc<HashMap<String, HandlerDef>>,
     pub extern_fns: Arc<HashMap<String, ExternFnDef>>,
+    pub queries: Arc<HashMap<String, QueryDef>>,
     scopes: Vec<HashMap<String, Value>>,
     pub stored_count: u64,
 }
@@ -261,9 +264,15 @@ impl ExecEnv {
             embedder,
             handlers,
             extern_fns,
+            queries: Arc::new(HashMap::new()),
             scopes: vec![HashMap::new()],
             stored_count: 0,
         }
+    }
+
+    pub fn with_queries(mut self, queries: Arc<HashMap<String, QueryDef>>) -> Self {
+        self.queries = queries;
+        self
     }
 
     pub fn push_scope(&mut self) {
