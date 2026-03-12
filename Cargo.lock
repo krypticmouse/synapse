@@ -2591,6 +2591,7 @@ dependencies = [
  "chrono",
  "neo4rs",
  "qdrant-client",
+ "regex",
  "rig-core",
  "rusqlite",
  "serde",

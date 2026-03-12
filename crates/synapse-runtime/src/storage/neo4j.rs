@@ -130,6 +130,13 @@ impl Neo4jBackend {
                 .conditions
                 .iter()
                 .map(|c| {
+                    if matches!(c.value, crate::value::Value::Null) {
+                        return match c.op {
+                            super::ConditionOp::Eq => format!("n.{} IS NULL", c.field),
+                            super::ConditionOp::Ne => format!("n.{} IS NOT NULL", c.field),
+                            _ => format!("n.{} = null", c.field),
+                        };
+                    }
                     let op = match c.op {
                         super::ConditionOp::Eq => "=",
                         super::ConditionOp::Ne => "<>",
@@ -272,7 +279,7 @@ impl Neo4jBackend {
 
         let cypher = format!(
             "MATCH (e:Entity) \
-             WHERE toLower(e.name) CONTAINS toLower($input) \
+             WHERE toLower($input) CONTAINS toLower(e.name) \
              MATCH (e)-[*1..{hops}]-(related) \
              WHERE related:{type_name} \
              RETURN DISTINCT related._id AS id"
@@ -353,6 +360,25 @@ impl Neo4jBackend {
             "MATCH (n:{type_name} {{_id: $id}}) DETACH DELETE n"
         ))
         .param("id", id.to_string());
+
+        graph
+            .run(query)
+            .await
+            .map_err(|e| StorageError::Neo4j(e.to_string()))?;
+
+        Ok(())
+    }
+
+    /// Delete all nodes of the given label (and their relationships).
+    pub async fn clear(&self, type_name: &str) -> StorageResult<()> {
+        let graph = self
+            .graph
+            .as_ref()
+            .ok_or_else(|| StorageError::NotConnected("neo4j".into()))?;
+
+        let query = neo4rs::query(&format!(
+            "MATCH (n:{type_name}) DETACH DELETE n"
+        ));
 
         graph
             .run(query)

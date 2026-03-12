@@ -1,8 +1,10 @@
 pub mod apply;
 pub mod check;
+pub mod clear;
 pub mod destroy;
 pub mod emit;
 pub mod init;
+pub mod inspect;
 pub mod logs;
 pub mod plan;
 pub mod query;

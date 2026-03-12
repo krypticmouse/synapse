@@ -3,6 +3,7 @@ use std::path::Path;
 
 use synapse_core::ast::Item;
 use synapse_runtime::config::{GraphConfig, RuntimeConfig, VectorConfig};
+use synapse_runtime::llm::{EmbeddingClient, LlmClient};
 use synapse_runtime::storage::neo4j::Neo4jBackend;
 use synapse_runtime::storage::qdrant::QdrantBackend;
 use synapse_runtime::storage::sqlite::SqliteBackend;
@@ -50,7 +51,9 @@ pub async fn run(file: &str, port: Option<u16>, daemon: bool) -> anyhow::Result<
             println!("  ✓ Qdrant auto-started at {url}");
         }
         Some(VectorConfig::External { url, .. }) => {
-            println!("  ✓ Qdrant configured at {url} (connect on demand)");
+            let qdrant = QdrantBackend::connect(url).await?;
+            storage.vector = Some(StorageBackend::Qdrant(qdrant));
+            println!("  ✓ Connected to Qdrant ({url})");
         }
         None => {}
     }
@@ -64,19 +67,54 @@ pub async fn run(file: &str, port: Option<u16>, daemon: bool) -> anyhow::Result<
             println!("  ✓ Neo4j auto-started at {url}");
         }
         Some(GraphConfig::External { url, .. }) => {
-            println!("  ✓ Neo4j configured at {url} (connect on demand)");
+            let neo4j = Neo4jBackend::connect(url).await?;
+            storage.graph = Some(StorageBackend::Neo4j(neo4j));
+            println!("  ✓ Connected to Neo4j ({url})");
         }
         None => {}
     }
 
+    // Build LLM client from extractor config (if present)
+    let llm = match &config.extractor {
+        Some(ext_cfg) => {
+            let client = LlmClient::from_config(ext_cfg)?;
+            println!("  ✓ LLM extractor configured ({}/{})", ext_cfg.provider, ext_cfg.model);
+            Some(client)
+        }
+        None => None,
+    };
+
+    // Build embedding client (if configured), shared between storage and runtime
+    let embedder = match &config.embedding {
+        Some(emb_cfg) => {
+            let client = EmbeddingClient::from_config(emb_cfg)?;
+            println!("  ✓ Embedding model configured ({}/{})", emb_cfg.provider, emb_cfg.model);
+            Some(std::sync::Arc::new(client))
+        }
+        None => None,
+    };
+
+    storage.embedder = embedder.clone();
+
+    if let Some(ref emb) = embedder {
+        if let Some(StorageBackend::Qdrant(ref mut qdrant)) = storage.vector {
+            qdrant.set_embedder(emb.clone());
+        }
+    }
+
     // Build runtime
-    let runtime = Runtime::new(program, storage);
+    let runtime = Runtime::new(program, storage, llm, embedder)
+        .with_source_file(file);
     runtime.init_storage().await?;
 
     // Start policy scheduler
     let scheduler = synapse_runtime::interpreter::policy::PolicyScheduler::from_program(
         &runtime.program,
         runtime.storage.clone(),
+        runtime.llm.clone(),
+        runtime.embedder.clone(),
+        runtime.handlers.clone(),
+        runtime.extern_fns.clone(),
     );
     let _policy_handles = scheduler.start();
 

@@ -138,6 +138,66 @@ impl Client {
             .map_err(|e| SynapseClientError::Request(e.to_string()))
     }
 
+    /// Trigger a hot reload of the runtime.
+    pub async fn reload(&self) -> Result<serde_json::Value> {
+        let url = format!("{}/reload", self.base_url);
+        let resp = self
+            .http
+            .post(&url)
+            .send()
+            .await
+            .map_err(|e| SynapseClientError::Connection(e.to_string()))?;
+
+        if !resp.status().is_success() {
+            let msg = resp.text().await.unwrap_or_default();
+            return Err(SynapseClientError::Request(msg));
+        }
+
+        resp.json()
+            .await
+            .map_err(|e| SynapseClientError::Request(e.to_string()))
+    }
+
+    /// Clear all records from all configured backends.
+    pub async fn clear(&self) -> Result<serde_json::Value> {
+        let url = format!("{}/clear", self.base_url);
+        let resp = self
+            .http
+            .post(&url)
+            .send()
+            .await
+            .map_err(|e| SynapseClientError::Connection(e.to_string()))?;
+
+        if !resp.status().is_success() {
+            let msg = resp.text().await.unwrap_or_default();
+            return Err(SynapseClientError::Request(msg));
+        }
+
+        resp.json()
+            .await
+            .map_err(|e| SynapseClientError::Request(e.to_string()))
+    }
+
+    /// Inspect all configured backends: list tables/collections and their records.
+    pub async fn inspect(&self) -> Result<serde_json::Value> {
+        let url = format!("{}/inspect", self.base_url);
+        let resp = self
+            .http
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| SynapseClientError::Connection(e.to_string()))?;
+
+        if !resp.status().is_success() {
+            let msg = resp.text().await.unwrap_or_default();
+            return Err(SynapseClientError::Request(msg));
+        }
+
+        resp.json()
+            .await
+            .map_err(|e| SynapseClientError::Request(e.to_string()))
+    }
+
     /// Simple connectivity check.
     pub async fn ping(&self) -> bool {
         self.health().await.is_ok()

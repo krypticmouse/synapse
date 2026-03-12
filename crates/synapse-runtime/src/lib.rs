@@ -1,6 +1,7 @@
 pub mod config;
 pub mod docker;
 pub mod interpreter;
+pub mod llm;
 pub mod server;
 pub mod storage;
 pub mod value;

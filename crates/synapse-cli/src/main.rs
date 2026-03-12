@@ -60,6 +60,24 @@ enum Command {
         level: Option<String>,
     },
 
+    /// Inspect all databases: show tables, record counts, and contents
+    Inspect {
+        /// Filter by backend: sqlite, qdrant, neo4j
+        #[arg(short, long)]
+        backend: Option<String>,
+
+        /// Filter by memory type name
+        #[arg(short, long)]
+        memory: Option<String>,
+
+        /// Show only counts, not full records
+        #[arg(short, long)]
+        compact: bool,
+    },
+
+    /// Clear all records from all configured databases
+    Clear,
+
     /// Stop and destroy the runtime
     Destroy {
         /// Also delete all persisted data
@@ -90,15 +108,36 @@ enum Command {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    use tracing_subscriber::{fmt, EnvFilter};
-
-    fmt()
-        .with_env_filter(
-            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
-        )
-        .init();
+    use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
     let cli = Cli::parse();
+
+    let is_apply = matches!(cli.command, Command::Apply { .. });
+    let filter =
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
+    let console_layer = fmt::layer();
+
+    let file_layer = if is_apply {
+        let _ = std::fs::create_dir_all(".synapse");
+        std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(".synapse/runtime.log")
+            .ok()
+            .map(|f| {
+                fmt::layer()
+                    .with_writer(std::sync::Mutex::new(f))
+                    .with_ansi(false)
+            })
+    } else {
+        None
+    };
+
+    tracing_subscriber::registry()
+        .with(filter)
+        .with(console_layer)
+        .with(file_layer)
+        .init();
 
     match cli.command {
         Command::Init => commands::init::run(),
@@ -106,7 +145,11 @@ async fn main() -> anyhow::Result<()> {
         Command::Plan { file } => commands::plan::run(&file),
         Command::Apply { file, port, daemon } => commands::apply::run(&file, port, daemon).await,
         Command::Status => commands::status::run().await,
-        Command::Reload => commands::reload::run(),
+        Command::Inspect { backend, memory, compact } => {
+            commands::inspect::run(backend.as_deref(), memory.as_deref(), compact).await
+        }
+        Command::Clear => commands::clear::run().await,
+        Command::Reload => commands::reload::run().await,
         Command::Logs { follow, level } => commands::logs::run(follow, level.as_deref()),
         Command::Destroy { purge } => commands::destroy::run(purge),
         Command::Query { name, params } => commands::query::run(&name, &params).await,

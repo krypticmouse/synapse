@@ -124,8 +124,8 @@ pub async fn ensure_qdrant(data_dir: &Path) -> Result<String> {
         }
     }
 
-    let url = format!("http://localhost:{QDRANT_PORT}");
-    wait_for_port(QDRANT_PORT, Duration::from_secs(30)).await?;
+    let url = format!("http://localhost:{QDRANT_GRPC_PORT}");
+    wait_for_port(QDRANT_GRPC_PORT, Duration::from_secs(30)).await?;
     Ok(url)
 }
 

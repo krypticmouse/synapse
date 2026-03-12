@@ -2,6 +2,9 @@ pub mod neo4j;
 pub mod qdrant;
 pub mod sqlite;
 
+use std::sync::Arc;
+
+use crate::llm::EmbeddingClient;
 use crate::value::{Record, Value};
 use thiserror::Error;
 
@@ -76,6 +79,12 @@ pub struct QueryFilter {
     pub limit: Option<usize>,
     pub graph_match: Option<GraphMatch>,
     pub cypher_query: Option<CypherQuery>,
+    pub semantic_match: Option<SemanticMatch>,
+    /// Regex filters applied after DB query: (field_name, regex)
+    #[allow(clippy::type_complexity)]
+    pub regex_filters: Vec<(String, regex::Regex)>,
+    /// Raw SQL query to run instead of the normal table query
+    pub raw_sql: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -109,12 +118,20 @@ pub struct CypherQuery {
     pub params: std::collections::HashMap<String, String>,
 }
 
+/// Semantic similarity search via vector embeddings.
+#[derive(Debug, Clone)]
+pub struct SemanticMatch {
+    pub input: String,
+    pub threshold: f64,
+}
+
 /// Combined storage manager — holds all active backends.
 #[derive(Debug)]
 pub struct StorageManager {
     pub relational: Option<StorageBackend>,
     pub vector: Option<StorageBackend>,
     pub graph: Option<StorageBackend>,
+    pub embedder: Option<Arc<EmbeddingClient>>,
 }
 
 impl StorageManager {
@@ -123,6 +140,7 @@ impl StorageManager {
             relational: None,
             vector: None,
             graph: None,
+            embedder: None,
         }
     }
 
@@ -131,29 +149,120 @@ impl StorageManager {
     /// Neo4j gets the node and, if the record has subject/predicate/object
     /// fields, also creates a relationship triple.
     pub async fn store(&self, record: &Record) -> StorageResult<()> {
+        tracing::debug!(
+            type_name = %record.type_name, id = %record.id,
+            fields = ?record.fields.keys().collect::<Vec<_>>(),
+            "storing record"
+        );
         if let Some(ref r) = self.relational {
-            r.store(record).await?;
+            r.store(record).await.map_err(|e| {
+                tracing::error!(error = %e, type_name = %record.type_name, "SQLite store failed");
+                e
+            })?;
+            tracing::debug!(type_name = %record.type_name, "stored to SQLite");
         }
         if let Some(ref v) = self.vector {
-            v.store(record).await?;
+            v.store(record).await.map_err(|e| {
+                tracing::error!(error = %e, type_name = %record.type_name, "Qdrant store failed");
+                e
+            })?;
+            tracing::debug!(type_name = %record.type_name, "stored to Qdrant");
         }
         if let Some(StorageBackend::Neo4j(ref neo)) = self.graph {
-            neo.store(record).await?;
-            neo.store_triple(record).await?;
+            neo.store(record).await.map_err(|e| {
+                tracing::error!(error = %e, type_name = %record.type_name, "Neo4j store failed");
+                e
+            })?;
+            neo.store_triple(record).await.map_err(|e| {
+                tracing::error!(error = %e, type_name = %record.type_name, "Neo4j store_triple failed");
+                e
+            })?;
+            tracing::debug!(type_name = %record.type_name, "stored to Neo4j");
         }
         Ok(())
     }
 
+    /// Fetch full records by IDs from graph or vector backends (fallback
+    /// when the relational backend has no data for the queried type).
+    async fn fetch_records_by_ids(
+        &self,
+        type_name: &str,
+        ids: &std::collections::HashSet<String>,
+        filter: &QueryFilter,
+    ) -> StorageResult<Vec<Record>> {
+        let mut results = Vec::new();
+
+        // Try graph backend first (it stores richer record data)
+        if let Some(ref g) = self.graph {
+            let all = g.query(type_name, &QueryFilter::default()).await?;
+            for r in all {
+                if ids.contains(&r.id) {
+                    results.push(r);
+                }
+            }
+        }
+
+        // If graph didn't have them, try vector backend
+        if results.is_empty() {
+            if let Some(ref v) = self.vector {
+                let all = v.query(type_name, &QueryFilter::default()).await?;
+                for r in all {
+                    if ids.contains(&r.id) {
+                        results.push(r);
+                    }
+                }
+            }
+        }
+
+        // Apply remaining filter conditions in memory
+        for c in &filter.conditions {
+            results.retain(|r| {
+                let field_val = r.fields.get(&c.field).unwrap_or(&Value::Null);
+                match c.op {
+                    ConditionOp::Eq => field_val == &c.value,
+                    ConditionOp::Ne => field_val != &c.value,
+                    _ => true,
+                }
+            });
+        }
+
+        // Apply ordering
+        if let Some((ref field, asc)) = filter.order_by {
+            results.sort_by(|a, b| {
+                let va = a.fields.get(field);
+                let vb = b.fields.get(field);
+                let ord = match (va, vb) {
+                    (Some(Value::Float(fa)), Some(Value::Float(fb))) => fa.partial_cmp(fb).unwrap_or(std::cmp::Ordering::Equal),
+                    (Some(Value::Int(ia)), Some(Value::Int(ib))) => ia.cmp(ib),
+                    (Some(Value::String(sa)), Some(Value::String(sb))) => sa.cmp(sb),
+                    _ => std::cmp::Ordering::Equal,
+                };
+                if asc { ord } else { ord.reverse() }
+            });
+        }
+
+        // Apply limit
+        if let Some(limit) = filter.limit {
+            results.truncate(limit);
+        }
+
+        tracing::debug!(count = results.len(), "fetched {} records from alternate backends", results.len());
+        Ok(results)
+    }
+
     /// Query with multi-backend support.
-    /// 1. If graph conditions exist and a graph backend is configured,
-    ///    run the graph query first to get candidate IDs.
-    /// 2. Query relational with those IDs as an additional filter.
+    ///
+    /// Strategy: gather candidate IDs from graph and semantic backends,
+    /// then try to fetch matching records from the relational backend.
+    /// If relational is empty/unavailable, fall back to fetching records
+    /// directly from whichever backend has them (graph or vector).
     pub async fn query(&self, type_name: &str, filter: &QueryFilter) -> StorageResult<Vec<Record>> {
         let mut graph_ids: Option<std::collections::HashSet<String>> = None;
 
         if let Some(StorageBackend::Neo4j(ref neo)) = self.graph {
             if let Some(ref gm) = filter.graph_match {
                 let ids = neo.graph_match_ids(type_name, &gm.input, gm.hops).await?;
+                tracing::debug!(count = ids.len(), input = %gm.input, "graph_match returned IDs: {:?}", ids);
                 graph_ids = Some(ids);
             }
             if let Some(ref cq) = filter.cypher_query {
@@ -165,14 +274,81 @@ impl StorageManager {
             }
         }
 
-        let mut results = if let Some(ref r) = self.relational {
+        let mut semantic_ids: Option<std::collections::HashSet<String>> = None;
+        if let Some(StorageBackend::Qdrant(ref qdrant)) = self.vector {
+            if let Some(ref sm) = filter.semantic_match {
+                if let Some(ref embedder) = self.embedder {
+                    match embedder.embed(&sm.input).await {
+                        Ok(vector) => {
+                            let limit = filter.limit.unwrap_or(20);
+                            match qdrant.search_by_vector(type_name, vector, limit, sm.threshold).await {
+                                Ok(ids) => {
+                                    tracing::debug!(count = ids.len(), input = %sm.input, "semantic_match returned IDs: {:?}", ids);
+                                    semantic_ids = Some(ids);
+                                }
+                                Err(e) => {
+                                    tracing::error!(error = %e, "semantic search failed");
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            tracing::error!(error = %e, "embedding generation for query failed");
+                        }
+                    }
+                }
+            }
+        }
+
+        // Intersect graph and semantic candidate IDs
+        let candidate_ids: Option<std::collections::HashSet<String>> = match (&graph_ids, &semantic_ids) {
+            (Some(g), Some(s)) => {
+                let intersection: std::collections::HashSet<String> =
+                    g.intersection(s).cloned().collect();
+                tracing::debug!(graph = g.len(), semantic = s.len(), intersection = intersection.len(), "intersected candidate IDs");
+                Some(intersection)
+            }
+            (Some(g), None) => Some(g.clone()),
+            (None, Some(s)) => Some(s.clone()),
+            (None, None) => None,
+        };
+
+        tracing::debug!(type_name = %type_name, conditions = ?filter.conditions, limit = ?filter.limit, "query filter");
+
+        let mut results = if let Some(ref raw_sql) = filter.raw_sql {
+            if let Some(StorageBackend::Sqlite(ref sqlite)) = self.relational {
+                sqlite.raw_sql(raw_sql)?
+            } else {
+                vec![]
+            }
+        } else if let Some(ref r) = self.relational {
             r.query(type_name, filter).await?
         } else {
             vec![]
         };
 
-        if let Some(ref ids) = graph_ids {
-            results.retain(|r| ids.contains(&r.id));
+        tracing::debug!(count = results.len(), "relational query returned {} records", results.len());
+
+        if let Some(ref ids) = candidate_ids {
+            if results.is_empty() {
+                // Relational backend has no data — fall back to fetching records
+                // from graph or vector backends using candidate IDs.
+                tracing::debug!(candidates = ids.len(), "relational empty, fetching from alternate backends");
+                results = self.fetch_records_by_ids(type_name, ids, filter).await?;
+            } else {
+                let before = results.len();
+                results.retain(|r| ids.contains(&r.id));
+                tracing::debug!(before = before, after = results.len(), "filtered relational results by candidate IDs");
+            }
+        }
+
+        for (field, re) in &filter.regex_filters {
+            results.retain(|r| {
+                r.fields
+                    .get(field)
+                    .and_then(|v| v.as_str())
+                    .map(|s| re.is_match(s))
+                    .unwrap_or(false)
+            });
         }
 
         Ok(results)
@@ -189,6 +365,12 @@ impl StorageManager {
         if let Some(ref r) = self.relational {
             r.delete(type_name, id).await?;
         }
+        if let Some(StorageBackend::Qdrant(ref qdrant)) = self.vector {
+            qdrant.delete(type_name, id).await?;
+        }
+        if let Some(ref g) = self.graph {
+            g.delete(type_name, id).await?;
+        }
         Ok(())
     }
 
@@ -200,6 +382,166 @@ impl StorageManager {
         if let Some(ref r) = self.relational {
             r.ensure_table(type_name, fields).await?;
         }
+        if let Some(ref v) = self.vector {
+            v.ensure_table(type_name, fields).await?;
+        }
         Ok(())
+    }
+
+    /// Clear all records from all backends for the given memory types.
+    pub async fn clear(&self, memory_names: &[&str]) -> StorageResult<serde_json::Value> {
+        let mut report = serde_json::Map::new();
+
+        if let Some(StorageBackend::Sqlite(ref sqlite)) = self.relational {
+            let mut cleared = Vec::new();
+            for name in memory_names {
+                match sqlite.clear(name).await {
+                    Ok(()) => cleared.push(name.to_string()),
+                    Err(e) => tracing::warn!(table = name, error = %e, "failed to clear SQLite table"),
+                }
+            }
+            report.insert("sqlite".into(), serde_json::json!(cleared));
+        }
+
+        if let Some(StorageBackend::Qdrant(ref qdrant)) = self.vector {
+            let mut cleared = Vec::new();
+            for name in memory_names {
+                match qdrant.clear(name).await {
+                    Ok(()) => cleared.push(name.to_string()),
+                    Err(e) => tracing::warn!(collection = name, error = %e, "failed to clear Qdrant collection"),
+                }
+            }
+            report.insert("qdrant".into(), serde_json::json!(cleared));
+        }
+
+        if let Some(StorageBackend::Neo4j(ref neo)) = self.graph {
+            let mut cleared = Vec::new();
+            for name in memory_names {
+                match neo.clear(name).await {
+                    Ok(()) => cleared.push(name.to_string()),
+                    Err(e) => tracing::warn!(label = name, error = %e, "failed to clear Neo4j label"),
+                }
+            }
+            // Also clear Entity nodes
+            if let Err(e) = neo.clear("Entity").await {
+                tracing::warn!(error = %e, "failed to clear Neo4j Entity nodes");
+            } else {
+                cleared.push("Entity".into());
+            }
+            report.insert("neo4j".into(), serde_json::json!(cleared));
+        }
+
+        Ok(serde_json::Value::Object(report))
+    }
+
+    /// Execute raw SQL against the relational backend.
+    pub fn raw_sql(&self, sql: &str) -> StorageResult<Vec<crate::value::Record>> {
+        if let Some(StorageBackend::Sqlite(ref sqlite)) = self.relational {
+            sqlite.raw_sql(sql)
+        } else {
+            Err(StorageError::NotConnected("no relational backend for raw SQL".into()))
+        }
+    }
+
+    /// Inspect all backends: list tables/collections and record counts.
+    pub async fn inspect(&self, memory_names: &[&str]) -> serde_json::Value {
+        let mut result = serde_json::json!({});
+
+        // SQLite
+        if let Some(StorageBackend::Sqlite(ref sqlite)) = self.relational {
+            let mut tables = serde_json::Map::new();
+            for name in memory_names {
+                match sqlite.raw_sql(&format!("SELECT * FROM {name}")) {
+                    Ok(records) => {
+                        let rows: Vec<serde_json::Value> = records
+                            .into_iter()
+                            .map(|r| serde_json::Value::from(Value::Record(r)))
+                            .collect();
+                        tables.insert(name.to_string(), serde_json::json!({
+                            "count": rows.len(),
+                            "records": rows,
+                        }));
+                    }
+                    Err(e) => {
+                        tables.insert(name.to_string(), serde_json::json!({
+                            "error": e.to_string(),
+                        }));
+                    }
+                }
+            }
+            result["sqlite"] = serde_json::Value::Object(tables);
+        } else {
+            result["sqlite"] = serde_json::json!("not configured");
+        }
+
+        // Qdrant
+        if let Some(StorageBackend::Qdrant(ref qdrant)) = self.vector {
+            let mut collections = serde_json::Map::new();
+            for name in memory_names {
+                let filter = QueryFilter::default();
+                match qdrant.query(name, &filter).await {
+                    Ok(records) => {
+                        let rows: Vec<serde_json::Value> = records
+                            .into_iter()
+                            .map(|r| serde_json::Value::from(Value::Record(r)))
+                            .collect();
+                        collections.insert(name.to_string(), serde_json::json!({
+                            "count": rows.len(),
+                            "records": rows,
+                        }));
+                    }
+                    Err(e) => {
+                        collections.insert(name.to_string(), serde_json::json!({
+                            "error": e.to_string(),
+                        }));
+                    }
+                }
+            }
+            result["qdrant"] = serde_json::Value::Object(collections);
+        } else {
+            result["qdrant"] = serde_json::json!("not configured");
+        }
+
+        // Neo4j
+        if let Some(StorageBackend::Neo4j(ref neo)) = self.graph {
+            let mut nodes = serde_json::Map::new();
+            for name in memory_names {
+                let filter = QueryFilter::default();
+                match neo.query(name, &filter).await {
+                    Ok(records) => {
+                        let rows: Vec<serde_json::Value> = records
+                            .into_iter()
+                            .map(|r| serde_json::Value::from(Value::Record(r)))
+                            .collect();
+                        nodes.insert(name.to_string(), serde_json::json!({
+                            "count": rows.len(),
+                            "records": rows,
+                        }));
+                    }
+                    Err(e) => {
+                        nodes.insert(name.to_string(), serde_json::json!({
+                            "error": e.to_string(),
+                        }));
+                    }
+                }
+            }
+            // Also grab Entity nodes
+            let filter = QueryFilter::default();
+            if let Ok(records) = neo.query("Entity", &filter).await {
+                let rows: Vec<serde_json::Value> = records
+                    .into_iter()
+                    .map(|r| serde_json::Value::from(Value::Record(r)))
+                    .collect();
+                nodes.insert("Entity".to_string(), serde_json::json!({
+                    "count": rows.len(),
+                    "records": rows,
+                }));
+            }
+            result["neo4j"] = serde_json::Value::Object(nodes);
+        } else {
+            result["neo4j"] = serde_json::json!("not configured");
+        }
+
+        result
     }
 }

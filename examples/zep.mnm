@@ -2,7 +2,7 @@
 # Temporal Knowledge Graph Memory System
 
 config {
-  storage: sqlite("./zep.db")
+  storage: sqlite("./data/zep.db")
   vector: auto
   graph: auto
   embedding: openai("text-embedding-3-small")
@@ -54,7 +54,7 @@ namespace zep_agent {
 
   # === HANDLERS ===
   
-  # When conversation ends, extract episodes and facts
+  # When conversation ends, extrimage.pngact episodes and facts
   on conversation_end(session_id: string, messages: Message[]) {
     # Store as episode
     let episode = Episode {

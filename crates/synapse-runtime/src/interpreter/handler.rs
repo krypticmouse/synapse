@@ -29,12 +29,20 @@ async fn exec_stmt(env: &mut ExecEnv, stmt: &Stmt) -> anyhow::Result<Option<Valu
         }
         Stmt::Assign { target, value } => {
             let val = eval_expr(env, value).await?;
-            // Simple case: assign to identifier
-            if let Expr::Ident(name) = target {
-                env.set(name, val);
+            match target {
+                Expr::Ident(name) => {
+                    env.set(name, val);
+                }
+                Expr::FieldAccess { object, field } => {
+                    if let Expr::Ident(obj_name) = object.as_ref() {
+                        if let Value::Record(mut record) = env.get(obj_name) {
+                            record.set(field, val);
+                            env.set(obj_name, Value::Record(record));
+                        }
+                    }
+                }
+                _ => {}
             }
-            // Field access assignment: obj.field = val
-            // Handled by updating the record in the environment
             Ok(None)
         }
         Stmt::If {
@@ -195,10 +203,9 @@ async fn eval_expr_inner(env: &mut ExecEnv, expr: &Expr) -> anyhow::Result<Value
             Ok(Value::Array(arr))
         }
 
-        Expr::InlineQuery(_qb) => {
-            // Inline queries would be executed against storage
-            // For now, return empty array
-            Ok(Value::Array(vec![]))
+        Expr::InlineQuery(qb) => {
+            let results = super::query::exec_query_body(env, qb).await?;
+            Ok(Value::Array(results))
         }
     }
 }
@@ -230,16 +237,42 @@ async fn eval_call(env: &mut ExecEnv, func: &Expr, args: &[CallArg]) -> anyhow::
         }
 
         "delete" => {
-            // delete() with no args: delete current record (in update context)
-            // delete(record): delete specific record
+            if let Some(Value::Record(record)) = arg_values.first() {
+                env.storage.delete(&record.type_name, &record.id).await?;
+            } else {
+                let type_name = env.get("_update_target");
+                let id = env.get("id");
+                if let (Value::String(t), Value::String(i)) = (type_name, id) {
+                    env.storage.delete(&t, &i).await?;
+                }
+            }
             Ok(Value::Null)
         }
 
-        "archive" => Ok(Value::Null),
+        "archive" => {
+            let type_name = env.get("_update_target");
+            let id = env.get("id");
+            if let (Value::String(t), Value::String(i)) = (type_name, id) {
+                if let Some(mut record) = env.storage.get(&t, &i).await? {
+                    record.set("_archived", Value::Bool(true));
+                    env.storage.store(&record).await?;
+                }
+            }
+            Ok(Value::Null)
+        }
+
         "discard" => Ok(Value::Null),
 
         "supersede" => {
-            // supersede(old, new): mark old as superseded by new
+            if let (Some(Value::Record(mut old)), Some(Value::Record(new_rec))) =
+                (arg_values.first().cloned(), arg_values.get(1).cloned())
+            {
+                old.set("superseded_by", Value::String(new_rec.id.clone()));
+                old.set("valid_until", Value::Timestamp(Utc::now()));
+                env.storage.store(&old).await?;
+                env.storage.store(&new_rec).await?;
+                env.stored_count += 1;
+            }
             Ok(Value::Null)
         }
 
@@ -262,43 +295,282 @@ async fn eval_call(env: &mut ExecEnv, func: &Expr, args: &[CallArg]) -> anyhow::
         },
 
         "extract" => {
-            // LLM-powered extraction — would use rig-core
-            // Returns extracted facts as an array
-            tracing::debug!("extract() called — requires LLM integration via rig");
-            Ok(Value::Array(vec![]))
+            let text = arg_values
+                .first()
+                .map(value_to_text)
+                .unwrap_or_default();
+            if let Some(ref llm) = env.llm {
+                match llm.extract(&text).await {
+                    Ok(facts) => Ok(Value::Array(facts)),
+                    Err(e) => {
+                        tracing::error!(error = %e, "extract() LLM call failed");
+                        Ok(Value::Array(vec![]))
+                    }
+                }
+            } else {
+                tracing::warn!("extract() called but no extractor configured");
+                Ok(Value::Array(vec![]))
+            }
         }
 
         "summarize" => {
-            // LLM-powered summarization — would use rig-core
-            tracing::debug!("summarize() called — requires LLM integration via rig");
-            Ok(Value::String("(summary placeholder)".into()))
+            let text = arg_values
+                .first()
+                .map(value_to_text)
+                .unwrap_or_default();
+            if let Some(ref llm) = env.llm {
+                match llm.summarize(&text).await {
+                    Ok(summary) => Ok(Value::String(summary)),
+                    Err(e) => {
+                        tracing::error!(error = %e, "summarize() LLM call failed");
+                        Ok(Value::String(String::new()))
+                    }
+                }
+            } else {
+                tracing::warn!("summarize() called but no extractor configured");
+                Ok(Value::String(String::new()))
+            }
         }
 
-        "semantic_match" | "graph_match" | "regex" | "cypher" | "sql" => {
-            // These are query-context functions, handled by the query executor
-            Ok(Value::Bool(true))
+        "semantic_match" => {
+            if let (Some(text_a), Some(text_b)) = (
+                arg_values.first().and_then(|v| v.as_str()),
+                arg_values.get(1).and_then(|v| v.as_str()),
+            ) {
+                let threshold = args
+                    .iter()
+                    .find_map(|a| {
+                        if a.name.as_deref() == Some("threshold") {
+                            if let Expr::Float(f) = &a.value {
+                                return Some(*f);
+                            }
+                        }
+                        None
+                    })
+                    .unwrap_or(0.7);
+
+                if let Some(ref _llm) = env.llm {
+                    if let Some(ref embedder) = env.embedder {
+                        match embedder.similarity(text_a, text_b).await {
+                            Ok(sim) => Ok(Value::Bool(sim >= threshold)),
+                            Err(e) => {
+                                tracing::error!(error = %e, "semantic_match embedding failed");
+                                Ok(Value::Bool(false))
+                            }
+                        }
+                    } else {
+                        tracing::warn!("semantic_match() called but no embedding model configured");
+                        Ok(Value::Bool(false))
+                    }
+                } else {
+                    tracing::warn!("semantic_match() called but no LLM configured");
+                    Ok(Value::Bool(false))
+                }
+            } else {
+                Ok(Value::Bool(true))
+            }
         }
 
-        "map" => {
-            // map(lambda) on an array in pipe context
-            Ok(Value::Array(vec![]))
+        "regex" => {
+            let text = arg_values
+                .first()
+                .and_then(|v| v.as_str())
+                .unwrap_or_default();
+            let pattern = arg_values
+                .get(1)
+                .and_then(|v| v.as_str())
+                .unwrap_or_default();
+            match regex::Regex::new(pattern) {
+                Ok(re) => Ok(Value::Bool(re.is_match(text))),
+                Err(e) => {
+                    tracing::error!(error = %e, pattern = %pattern, "invalid regex pattern");
+                    Ok(Value::Bool(false))
+                }
+            }
         }
 
-        "filter" => Ok(Value::Array(vec![])),
+        "sql" => {
+            let query_str = arg_values
+                .first()
+                .and_then(|v| v.as_str())
+                .unwrap_or_default()
+                .to_string();
+            if query_str.is_empty() {
+                return Ok(Value::Array(vec![]));
+            }
+            match env.storage.raw_sql(&query_str) {
+                Ok(records) => {
+                    let results: Vec<Value> = records.into_iter().map(Value::Record).collect();
+                    Ok(Value::Array(results))
+                }
+                Err(e) => {
+                    tracing::error!(error = %e, "sql() execution failed");
+                    Ok(Value::Array(vec![]))
+                }
+            }
+        }
 
-        "each" => Ok(Value::Null),
+        "graph_match" => {
+            let input = arg_values
+                .first()
+                .and_then(|v| v.as_str())
+                .unwrap_or_default()
+                .to_string();
+            let hops = arg_values
+                .get(1)
+                .and_then(|v| match v {
+                    Value::Int(n) => Some(*n as usize),
+                    _ => None,
+                })
+                .unwrap_or(2);
+            let type_name = env.get("_update_target");
+            let tn = type_name.as_str().unwrap_or("Entity");
+            if let Some(crate::storage::StorageBackend::Neo4j(ref neo)) = *&env.storage.graph {
+                match neo.graph_match_ids(tn, &input, hops).await {
+                    Ok(ids) => {
+                        let results: Vec<Value> = ids.into_iter().map(Value::String).collect();
+                        Ok(Value::Array(results))
+                    }
+                    Err(e) => {
+                        tracing::error!(error = %e, "graph_match() failed");
+                        Ok(Value::Array(vec![]))
+                    }
+                }
+            } else {
+                tracing::warn!("graph_match() called but no graph backend configured");
+                Ok(Value::Array(vec![]))
+            }
+        }
+
+        "cypher" => {
+            let query_str = arg_values
+                .first()
+                .and_then(|v| v.as_str())
+                .unwrap_or_default()
+                .to_string();
+            if query_str.is_empty() {
+                return Ok(Value::Array(vec![]));
+            }
+            let mut params = std::collections::HashMap::new();
+            for (i, arg) in args.iter().enumerate().skip(1) {
+                if let Some(ref name) = arg.name {
+                    if let Some(val) = arg_values.get(i) {
+                        if let Some(s) = val.as_str() {
+                            params.insert(name.clone(), s.to_string());
+                        }
+                    }
+                }
+            }
+            if let Some(crate::storage::StorageBackend::Neo4j(ref neo)) = *&env.storage.graph {
+                match neo.cypher_query_ids(&query_str, &params).await {
+                    Ok(ids) => {
+                        let results: Vec<Value> = ids.into_iter().map(Value::String).collect();
+                        Ok(Value::Array(results))
+                    }
+                    Err(e) => {
+                        tracing::error!(error = %e, "cypher() failed");
+                        Ok(Value::Array(vec![]))
+                    }
+                }
+            } else {
+                tracing::warn!("cypher() called but no graph backend configured");
+                Ok(Value::Array(vec![]))
+            }
+        }
+
+        "map" | "filter" | "each" => {
+            tracing::debug!("{func_name}() called outside pipe context");
+            Ok(Value::Null)
+        }
 
         "emit" => {
-            // emit("event_name", ...args) — trigger another handler
-            tracing::debug!("emit() called with args: {:?}", arg_values);
+            if let Some(Value::String(event_name)) = arg_values.first() {
+                if let Some(handler) = env.handlers.get(event_name.as_str()) {
+                    let handler = handler.clone();
+                    env.push_scope();
+                    for (i, param) in handler.params.iter().enumerate() {
+                        if let Some(val) = arg_values.get(i + 1) {
+                            env.set(&param.name, val.clone());
+                        }
+                    }
+                    exec_stmts(env, &handler.body).await?;
+                    env.pop_scope();
+                } else {
+                    tracing::warn!("emit(): unknown event '{event_name}'");
+                }
+            }
             Ok(Value::Null)
         }
 
         _ => {
+            if let Some(ref llm) = env.llm {
+                if let Some(ext_fn) = env.extern_fns.get(func_name) {
+                    let params: Vec<(String, String)> = ext_fn
+                        .params
+                        .iter()
+                        .map(|p| (p.name.clone(), format!("{:?}", p.ty)))
+                        .collect();
+                    let return_type = ext_fn
+                        .return_ty
+                        .as_ref()
+                        .map(|t| format!("{t:?}"))
+                        .unwrap_or_else(|| "any".into());
+                    match llm.call_extern(func_name, &params, &return_type, &arg_values).await {
+                        Ok(val) => return Ok(val),
+                        Err(e) => {
+                            tracing::error!(error = %e, "extern fn {func_name} LLM call failed");
+                        }
+                    }
+                }
+            }
             tracing::warn!("unknown function: {func_name}");
             Ok(Value::Null)
         }
     }
+}
+
+/// Convert a Value to a text string for LLM consumption.
+/// Handles strings directly, Records by pulling their `content` field
+/// (or joining all string fields), and arrays by recursing on each element.
+fn value_to_text(val: &Value) -> String {
+    match val {
+        Value::String(s) => s.clone(),
+        Value::Record(r) => {
+            if let Some(Value::String(s)) = r.fields.get("content") {
+                s.clone()
+            } else {
+                r.fields
+                    .values()
+                    .filter_map(|v| match v {
+                        Value::String(s) => Some(s.as_str()),
+                        _ => None,
+                    })
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            }
+        }
+        Value::Array(arr) => arr.iter().map(value_to_text).collect::<Vec<_>>().join("\n"),
+        Value::Int(n) => n.to_string(),
+        Value::Float(f) => f.to_string(),
+        Value::Bool(b) => b.to_string(),
+        _ => String::new(),
+    }
+}
+
+/// Apply a lambda expression: bind params, evaluate body, return result.
+async fn apply_lambda(
+    env: &mut ExecEnv,
+    params: &[String],
+    body: &Expr,
+    arg: Value,
+) -> anyhow::Result<Value> {
+    env.push_scope();
+    if let Some(param) = params.first() {
+        env.set(param, arg);
+    }
+    let result = eval_expr(env, body).await?;
+    env.pop_scope();
+    Ok(result)
 }
 
 /// Evaluate a piped function call: left |> func(args)
@@ -308,34 +580,149 @@ async fn eval_piped_call(
     left_val: Value,
     extra_args: &[CallArg],
 ) -> anyhow::Result<Value> {
-    let func_name = match func {
-        Expr::Ident(name) => name.as_str(),
+    let (func_name, lambda_args): (&str, &[CallArg]) = match func {
+        Expr::Ident(name) => (name.as_str(), extra_args),
         Expr::Call { func: inner, args } => {
-            // left |> func(args) — prepend left to args
-            let mut all_args = vec![CallArg {
-                name: None,
-                value: Expr::Null,
-            }];
-            all_args.extend(args.iter().cloned());
             let name = match inner.as_ref() {
                 Expr::Ident(n) => n.as_str(),
                 _ => return Ok(Value::Null),
             };
-            // Evaluate with left_val as first arg
-            let mut arg_values = vec![left_val.clone()];
-            for arg in args {
-                arg_values.push(eval_expr(env, &arg.value).await?);
+            if !matches!(name, "map" | "filter" | "each" | "group_by" | "store_as" | "delete_originals") {
+                let mut arg_values = vec![left_val.clone()];
+                for arg in args {
+                    arg_values.push(eval_expr(env, &arg.value).await?);
+                }
+                return eval_builtin_with_args(env, name, arg_values).await;
             }
-            return eval_builtin_with_args(env, name, arg_values).await;
+            (name, args.as_slice())
         }
         _ => return Ok(Value::Null),
     };
+
+    if matches!(func_name, "group_by") {
+        if let Value::Array(arr) = left_val {
+            let field_name = lambda_args
+                .first()
+                .and_then(|a| match &a.value {
+                    Expr::Ident(name) => Some(name.as_str()),
+                    _ => None,
+                })
+                .unwrap_or("id");
+
+            let mut groups: std::collections::HashMap<String, Vec<Value>> = std::collections::HashMap::new();
+            for item in arr {
+                let key = match &item {
+                    Value::Record(r) => r
+                        .get(field_name)
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("_unknown")
+                        .to_string(),
+                    _ => "_unknown".to_string(),
+                };
+                groups.entry(key).or_default().push(item);
+            }
+            let result: Vec<Value> = groups.into_values().map(Value::Array).collect();
+            return Ok(Value::Array(result));
+        }
+        return Ok(left_val);
+    }
+
+    if matches!(func_name, "store_as") {
+        let type_name = lambda_args
+            .first()
+            .and_then(|a| match &a.value {
+                Expr::Ident(name) => Some(name.clone()),
+                _ => None,
+            })
+            .unwrap_or_default();
+
+        if let Value::Array(arr) = left_val {
+            let mut stored = Vec::new();
+            for item in arr {
+                match item {
+                    Value::Record(mut r) => {
+                        r.type_name = type_name.clone();
+                        env.storage.store(&r).await?;
+                        env.stored_count += 1;
+                        stored.push(Value::Record(r));
+                    }
+                    Value::Array(sub) => {
+                        for sub_item in sub {
+                            if let Value::Record(mut r) = sub_item {
+                                r.type_name = type_name.clone();
+                                env.storage.store(&r).await?;
+                                env.stored_count += 1;
+                                stored.push(Value::Record(r));
+                            }
+                        }
+                    }
+                    other => stored.push(other),
+                }
+            }
+            return Ok(Value::Array(stored));
+        }
+        return Ok(Value::Null);
+    }
+
+    if matches!(func_name, "delete_originals") {
+        if let Value::Array(ref arr) = left_val {
+            for item in arr {
+                if let Value::Record(r) = item {
+                    env.storage.delete(&r.type_name, &r.id).await?;
+                }
+            }
+        }
+        return Ok(left_val);
+    }
+
+    if matches!(func_name, "map" | "filter" | "each") {
+        let lambda = lambda_args.iter().find_map(|arg| match &arg.value {
+            Expr::Lambda { params, body } => Some((params.as_slice(), body.as_ref())),
+            _ => None,
+        });
+
+        if let Some((params, body)) = lambda {
+            let arr = match left_val {
+                Value::Array(a) => a,
+                other => return Ok(other),
+            };
+
+            return match func_name {
+                "map" => {
+                    let mut result = Vec::with_capacity(arr.len());
+                    for item in arr {
+                        let val = apply_lambda(env, params, body, item).await?;
+                        result.push(val);
+                    }
+                    Ok(Value::Array(result))
+                }
+                "filter" => {
+                    let mut result = Vec::new();
+                    for item in arr {
+                        let cond = apply_lambda(env, params, body, item.clone()).await?;
+                        if cond.is_truthy() {
+                            result.push(item);
+                        }
+                    }
+                    Ok(Value::Array(result))
+                }
+                "each" => {
+                    for item in arr {
+                        apply_lambda(env, params, body, item).await?;
+                    }
+                    Ok(Value::Null)
+                }
+                _ => unreachable!(),
+            };
+        }
+        tracing::warn!("{func_name}() called without a lambda argument");
+        return Ok(left_val);
+    }
 
     let mut arg_values = vec![left_val];
     for arg in extra_args {
         arg_values.push(eval_expr(env, &arg.value).await?);
     }
-
     eval_builtin_with_args(env, func_name, arg_values).await
 }
 
@@ -362,15 +749,41 @@ async fn eval_builtin_with_args(
             Ok(Value::Null)
         }
         "extract" => {
-            tracing::debug!("extract() piped call");
-            Ok(Value::Array(vec![]))
+            let text = args
+                .first()
+                .map(value_to_text)
+                .unwrap_or_default();
+            if let Some(ref llm) = env.llm {
+                match llm.extract(&text).await {
+                    Ok(facts) => Ok(Value::Array(facts)),
+                    Err(e) => {
+                        tracing::error!(error = %e, "extract() piped LLM call failed");
+                        Ok(Value::Array(vec![]))
+                    }
+                }
+            } else {
+                tracing::warn!("extract() called but no extractor configured");
+                Ok(Value::Array(vec![]))
+            }
         }
-        "summarize" => Ok(Value::String("(summary)".into())),
-        "filter" => {
-            // filter(array, lambda) — lambda not yet evaluated
-            Ok(args.first().cloned().unwrap_or(Value::Array(vec![])))
+        "summarize" => {
+            let text = args
+                .first()
+                .map(value_to_text)
+                .unwrap_or_default();
+            if let Some(ref llm) = env.llm {
+                match llm.summarize(&text).await {
+                    Ok(summary) => Ok(Value::String(summary)),
+                    Err(e) => {
+                        tracing::error!(error = %e, "summarize() piped LLM call failed");
+                        Ok(Value::String(String::new()))
+                    }
+                }
+            } else {
+                tracing::warn!("summarize() called but no extractor configured");
+                Ok(Value::String(String::new()))
+            }
         }
-        "map" => Ok(args.first().cloned().unwrap_or(Value::Array(vec![]))),
         "len" => match args.first() {
             Some(Value::Array(a)) => Ok(Value::Int(a.len() as i64)),
             _ => Ok(Value::Int(0)),

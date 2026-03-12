@@ -7,18 +7,19 @@ use crate::value::Value;
 
 /// Execute a query definition against storage.
 pub async fn exec_query(env: &mut ExecEnv, query: &QueryDef) -> anyhow::Result<Vec<Value>> {
-    let body = &query.body;
+    exec_query_body(env, &query.body).await
+}
 
+/// Execute a QueryBody against storage (shared by named queries and inline queries).
+pub async fn exec_query_body(env: &mut ExecEnv, body: &QueryBody) -> anyhow::Result<Vec<Value>> {
     let mut filter = QueryFilter::default();
 
-    // Process order by
     if let Some(ref ob) = body.order_by {
         if let Expr::Ident(field) = &ob.expr {
             filter.order_by = Some((field.clone(), ob.direction == SortDir::Asc));
         }
     }
 
-    // Process limit
     if let Some(ref lim) = body.limit {
         let val = eval_expr(env, lim).await?;
         if let Value::Int(n) = val {
@@ -26,12 +27,10 @@ pub async fn exec_query(env: &mut ExecEnv, query: &QueryDef) -> anyhow::Result<V
         }
     }
 
-    // Process where clause into conditions (including graph filters)
     if let Some(ref where_expr) = body.where_clause {
         extract_conditions(env, where_expr, &mut filter).await;
     }
 
-    // Query each source type and combine results
     let mut all_results = vec![];
     for source in &body.from {
         let records = env.storage.query(source, &filter).await?;
@@ -132,6 +131,59 @@ async fn extract_conditions(env: &mut ExecEnv, expr: &Expr, filter: &mut QueryFi
                                     query: query_str.clone(),
                                     params,
                                 });
+                            }
+                        }
+                    }
+
+                    "semantic_match" => {
+                        let input = if let Some(arg) = args.first() {
+                            eval_expr(env, &arg.value)
+                                .await
+                                .ok()
+                                .and_then(|v| v.as_str().map(|s| s.to_string()))
+                                .unwrap_or_default()
+                        } else {
+                            String::new()
+                        };
+
+                        let threshold = args.iter().find_map(|a| {
+                            if a.name.as_deref() == Some("threshold") {
+                                match &a.value {
+                                    synapse_core::ast::Expr::Float(f) => Some(*f),
+                                    synapse_core::ast::Expr::Int(n) => Some(*n as f64),
+                                    _ => None,
+                                }
+                            } else {
+                                None
+                            }
+                        }).unwrap_or(0.7);
+
+                        filter.semantic_match = Some(crate::storage::SemanticMatch { input, threshold });
+                    }
+
+                    "regex" => {
+                        if let (Some(field_arg), Some(pattern_arg)) = (args.first(), args.get(1)) {
+                            if let Expr::Ident(field_name) = &field_arg.value {
+                                let pattern = if let Expr::Str(s) = &pattern_arg.value {
+                                    s.clone()
+                                } else if let Ok(val) = eval_expr(env, &pattern_arg.value).await {
+                                    val.as_str().unwrap_or_default().to_string()
+                                } else {
+                                    String::new()
+                                };
+                                if !pattern.is_empty() {
+                                    if let Ok(re) = regex::Regex::new(&pattern) {
+                                        filter.regex_filters.push((field_name.clone(), re));
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    "sql" => {
+                        if let Some(arg) = args.first() {
+                            if let Expr::Str(raw_sql) = &arg.value {
+                                filter.raw_sql = Some(raw_sql.clone());
                             }
                         }
                     }

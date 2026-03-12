@@ -21,8 +21,11 @@ pub fn build_router(runtime: Runtime) -> Router {
     Router::new()
         .route("/health", get(health))
         .route("/status", get(status))
+        .route("/inspect", get(inspect))
         .route("/emit", post(emit))
         .route("/query", post(query))
+        .route("/reload", post(reload))
+        .route("/clear", post(clear))
         .with_state(state)
 }
 
@@ -132,5 +135,41 @@ async fn query(
     match rt.query(&req.query, req.params).await {
         Ok(result) => Ok(Json(result)),
         Err(e) => Err((StatusCode::BAD_REQUEST, e.to_string())),
+    }
+}
+
+async fn inspect(State(state): State<AppState>) -> impl IntoResponse {
+    let rt = state.read().await;
+    let names: Vec<&str> = rt.memory_names();
+    let data = rt.storage.inspect(&names).await;
+    Json(data)
+}
+
+async fn clear(
+    State(state): State<AppState>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    tracing::info!("clear all databases requested");
+    let rt = state.read().await;
+    let names: Vec<&str> = rt.memory_names();
+    match rt.storage.clear(&names).await {
+        Ok(report) => Ok(Json(serde_json::json!({
+            "success": true,
+            "cleared": report,
+        }))),
+        Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, e.to_string())),
+    }
+}
+
+async fn reload(
+    State(state): State<AppState>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    tracing::info!("reload requested");
+    let mut rt = state.write().await;
+    match rt.reload() {
+        Ok(()) => Ok(Json(serde_json::json!({
+            "success": true,
+            "message": "runtime reloaded"
+        }))),
+        Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, e.to_string())),
     }
 }

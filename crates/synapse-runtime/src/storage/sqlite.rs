@@ -135,6 +135,16 @@ impl SqliteBackend {
                 .conditions
                 .iter()
                 .map(|c| {
+                    if matches!(c.value, Value::Null) {
+                        return match c.op {
+                            ConditionOp::Eq => format!("{} IS NULL", c.field),
+                            ConditionOp::Ne => format!("{} IS NOT NULL", c.field),
+                            _ => {
+                                bind_values.push(value_to_sqlite(&c.value));
+                                format!("{} = ?", c.field)
+                            }
+                        };
+                    }
                     let op = match c.op {
                         ConditionOp::Eq => "=",
                         ConditionOp::Ne => "!=",
@@ -201,6 +211,49 @@ impl SqliteBackend {
         conn.execute(&sql, [id])
             .map_err(|e| StorageError::Sqlite(e.to_string()))?;
         Ok(())
+    }
+
+    /// Delete all rows from the given table.
+    pub async fn clear(&self, type_name: &str) -> StorageResult<()> {
+        let conn = self.conn.lock().unwrap();
+        let sql = format!("DELETE FROM {type_name}");
+        conn.execute(&sql, [])
+            .map_err(|e| StorageError::Sqlite(e.to_string()))?;
+        Ok(())
+    }
+
+    /// Execute a raw SQL query and return results as Records.
+    pub fn raw_sql(&self, sql: &str) -> StorageResult<Vec<Record>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn
+            .prepare(sql)
+            .map_err(|e| StorageError::Sqlite(e.to_string()))?;
+
+        let columns: Vec<String> = stmt
+            .column_names()
+            .into_iter()
+            .map(|s| s.to_string())
+            .collect();
+
+        let rows = stmt
+            .query_map([], |row| {
+                let mut record = Record::new("_sql_result");
+                for (i, col) in columns.iter().enumerate() {
+                    if col == "_id" {
+                        record.id = row.get::<_, String>(i).unwrap_or_default();
+                    } else {
+                        record.fields.insert(col.clone(), sqlite_to_value(row, i));
+                    }
+                }
+                Ok(record)
+            })
+            .map_err(|e| StorageError::Sqlite(e.to_string()))?;
+
+        let mut results = vec![];
+        for row in rows {
+            results.push(row.map_err(|e| StorageError::Sqlite(e.to_string()))?);
+        }
+        Ok(results)
     }
 }
 
