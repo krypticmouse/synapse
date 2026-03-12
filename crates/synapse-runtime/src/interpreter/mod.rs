@@ -27,8 +27,8 @@ pub struct Runtime {
     pub queries: Arc<HashMap<String, QueryDef>>,
     /// Registered update definitions indexed by memory type
     pub updates: Arc<HashMap<String, UpdateDef>>,
-    /// Memory schemas: type_name -> fields
-    memories: HashMap<String, Vec<FieldDef>>,
+    /// Memory definitions: type_name -> full MemoryDef (fields, indexes, invariants)
+    pub memories: Arc<HashMap<String, MemoryDef>>,
     pub extern_fns: Arc<HashMap<String, ExternFnDef>>,
     /// Path to the .mnm source file (for hot reload)
     pub source_file: Option<String>,
@@ -74,7 +74,7 @@ impl Runtime {
             handlers: Arc::new(handlers),
             queries: Arc::new(queries),
             updates: Arc::new(updates),
-            memories,
+            memories: Arc::new(memories),
             extern_fns: Arc::new(extern_fns),
             source_file: None,
             stats: Arc::new(RwLock::new(RuntimeStats {
@@ -120,7 +120,7 @@ impl Runtime {
         self.handlers = Arc::new(handlers);
         self.queries = Arc::new(queries);
         self.updates = Arc::new(updates);
-        self.memories = memories;
+        self.memories = Arc::new(memories);
         self.extern_fns = Arc::new(extern_fns);
 
         tracing::info!(file = %path, "runtime reloaded successfully");
@@ -129,12 +129,15 @@ impl Runtime {
 
     /// Initialize storage tables for all memory definitions
     pub async fn init_storage(&self) -> anyhow::Result<()> {
-        for (name, fields) in &self.memories {
-            let field_specs: Vec<(String, String)> = fields
+        for (name, mem) in self.memories.as_ref() {
+            let field_specs: Vec<(String, String)> = mem
+                .fields
                 .iter()
                 .map(|f| (f.name.clone(), type_to_storage_string(&f.ty)))
                 .collect();
-            self.storage.ensure_table(name, &field_specs).await?;
+            self.storage
+                .ensure_table(name, &field_specs, &mem.indexes)
+                .await?;
         }
         Ok(())
     }
@@ -159,7 +162,8 @@ impl Runtime {
             self.extern_fns.clone(),
         )
         .with_queries(self.queries.clone())
-        .with_updates(self.updates.clone());
+        .with_updates(self.updates.clone())
+        .with_memories(self.memories.clone());
 
         // Bind handler parameters from the payload
         if let serde_json::Value::Object(map) = &payload {
@@ -202,7 +206,8 @@ impl Runtime {
             self.extern_fns.clone(),
         )
         .with_queries(self.queries.clone())
-        .with_updates(self.updates.clone());
+        .with_updates(self.updates.clone())
+        .with_memories(self.memories.clone());
 
         // Bind query parameters
         if let serde_json::Value::Object(map) = &params {
@@ -249,6 +254,7 @@ pub struct ExecEnv {
     pub extern_fns: Arc<HashMap<String, ExternFnDef>>,
     pub queries: Arc<HashMap<String, QueryDef>>,
     pub updates: Arc<HashMap<String, UpdateDef>>,
+    pub memories: Arc<HashMap<String, MemoryDef>>,
     scopes: Vec<HashMap<String, Value>>,
     pub stored_count: u64,
 }
@@ -269,6 +275,7 @@ impl ExecEnv {
             extern_fns,
             queries: Arc::new(HashMap::new()),
             updates: Arc::new(HashMap::new()),
+            memories: Arc::new(HashMap::new()),
             scopes: vec![HashMap::new()],
             stored_count: 0,
         }
@@ -281,6 +288,11 @@ impl ExecEnv {
 
     pub fn with_updates(mut self, updates: Arc<HashMap<String, UpdateDef>>) -> Self {
         self.updates = updates;
+        self
+    }
+
+    pub fn with_memories(mut self, memories: Arc<HashMap<String, MemoryDef>>) -> Self {
+        self.memories = memories;
         self
     }
 
@@ -313,7 +325,7 @@ fn collect_definitions(
     handlers: &mut HashMap<String, HandlerDef>,
     queries: &mut HashMap<String, QueryDef>,
     updates: &mut HashMap<String, UpdateDef>,
-    memories: &mut HashMap<String, Vec<FieldDef>>,
+    memories: &mut HashMap<String, MemoryDef>,
     extern_fns: &mut HashMap<String, ExternFnDef>,
 ) {
     for item in items {
@@ -328,7 +340,7 @@ fn collect_definitions(
                 updates.insert(u.target.clone(), u.clone());
             }
             Item::Memory(m) => {
-                memories.insert(m.name.clone(), m.fields.clone());
+                memories.insert(m.name.clone(), m.clone());
             }
             Item::ExternFn(ef) => {
                 extern_fns.insert(ef.name.clone(), ef.clone());

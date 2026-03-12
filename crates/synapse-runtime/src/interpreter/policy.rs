@@ -19,6 +19,7 @@ pub struct PolicyScheduler {
     extern_fns: Arc<HashMap<String, ExternFnDef>>,
     queries: Arc<HashMap<String, QueryDef>>,
     updates: Arc<HashMap<String, UpdateDef>>,
+    memories: Arc<HashMap<String, MemoryDef>>,
     running: Arc<RwLock<bool>>,
 }
 
@@ -32,6 +33,7 @@ impl PolicyScheduler {
         extern_fns: Arc<HashMap<String, ExternFnDef>>,
         queries: Arc<HashMap<String, QueryDef>>,
         updates: Arc<HashMap<String, UpdateDef>>,
+        memories: Arc<HashMap<String, MemoryDef>>,
     ) -> Self {
         let mut periodic_rules = Vec::new();
 
@@ -46,6 +48,7 @@ impl PolicyScheduler {
             extern_fns,
             queries,
             updates,
+            memories,
             running: Arc::new(RwLock::new(true)),
         }
     }
@@ -63,6 +66,7 @@ impl PolicyScheduler {
             let extern_fns = self.extern_fns.clone();
             let queries = self.queries.clone();
             let updates = self.updates.clone();
+            let memories = self.memories.clone();
             let running = self.running.clone();
             let interval = std::time::Duration::from_secs(*interval_secs);
             let update_def = update_def.clone();
@@ -89,7 +93,8 @@ impl PolicyScheduler {
                             extern_fns.clone(),
                         )
                         .with_queries(queries.clone())
-                        .with_updates(updates.clone());
+                        .with_updates(updates.clone())
+                        .with_memories(memories.clone());
                         update::exec_every(&mut env, &update_def).await
                     });
 

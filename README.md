@@ -260,16 +260,25 @@ memory Fact {
 }
 ```
 
-**Field decorators:**
+**Decorators:**
+
+Decorators can be placed inline on a field or standalone inside the memory block.
 
 ```
 memory Note {
-  @index content: string         # indexed for fast lookups
-  @invariant confidence > 0      # enforced constraint
-  @extern source: string         # externally-managed field
+  content: string
+  confidence: float[0,1]
   tags: string[] = []            # default value
+  @extern source: string         # externally-managed field
+
+  @index content                 # creates a SQLite index on the column
+  @invariant confidence > 0      # enforced at store() time
 }
 ```
+
+`@index <field>` creates a `CREATE INDEX IF NOT EXISTS` on the corresponding SQLite column. This speeds up `WHERE` filters and is also used as the conflict key for `on_conflict` rules.
+
+`@invariant <expr>` declares a constraint that is evaluated against every record before `store()` writes it. If the expression evaluates to false, the store is rejected with an error. The expression can reference any field of the record.
 
 Every record automatically gets `_id` (UUID) and `_type` (memory name) virtual fields.
 
@@ -450,7 +459,7 @@ expr                       # bare expression (e.g. function call)
 | Function | Description |
 |----------|-------------|
 | `now()` | Current UTC timestamp |
-| `store(record)` | Store a record to all configured backends |
+| `store(record)` | Validate `@invariant` constraints, then store to all configured backends |
 | `delete(record?)` | Delete a record (or current record in update rules) |
 | `archive()` | Mark current record as `_archived: true` |
 | `discard(record?)` | No-op; explicitly ignore a record |
@@ -522,7 +531,7 @@ synapse/
 
 ### Storage Backends
 
-**SQLite** (relational) — primary record store. Stores all fields as columns. Handles standard `WHERE` conditions, `ORDER BY`, `LIMIT`. Created automatically from memory schemas.
+**SQLite** (relational) — primary record store. Stores all fields as columns. Handles standard `WHERE` conditions, `ORDER BY`, `LIMIT`. Tables and indexes are created automatically from memory schemas — each `@index` declaration produces a `CREATE INDEX IF NOT EXISTS` on the corresponding column.
 
 **Qdrant** (vector) — vector similarity search. On `store()`, the record's `content` field is embedded and stored as a vector point. On query, `semantic_match` embeds the input and finds nearest neighbors, returning `(id, score)` pairs.
 

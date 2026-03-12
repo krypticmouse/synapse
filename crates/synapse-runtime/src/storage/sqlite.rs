@@ -42,6 +42,7 @@ impl SqliteBackend {
         &self,
         type_name: &str,
         fields: &[(String, String)],
+        indexes: &[String],
     ) -> StorageResult<()> {
         let conn = self.conn.lock().unwrap();
         let columns: Vec<String> = fields
@@ -57,6 +58,14 @@ impl SqliteBackend {
         );
         conn.execute(&sql, [])
             .map_err(|e| StorageError::Sqlite(e.to_string()))?;
+
+        for field in indexes {
+            let idx_name = format!("idx_{type_name}_{field}");
+            let idx_sql = format!("CREATE INDEX IF NOT EXISTS {idx_name} ON {type_name} ({field})");
+            conn.execute(&idx_sql, [])
+                .map_err(|e| StorageError::Sqlite(e.to_string()))?;
+        }
+
         Ok(())
     }
 

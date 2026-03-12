@@ -42,6 +42,7 @@ impl QdrantBackend {
         &self,
         type_name: &str,
         _fields: &[(String, String)],
+        _indexes: &[String],
     ) -> StorageResult<()> {
         let client = self
             .client

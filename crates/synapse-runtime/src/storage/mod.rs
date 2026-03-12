@@ -66,8 +66,9 @@ impl StorageBackend {
         &self,
         type_name: &str,
         fields: &[(String, String)],
+        indexes: &[String],
     ) -> StorageResult<()> {
-        dispatch!(self, ensure_table(type_name, fields))
+        dispatch!(self, ensure_table(type_name, fields, indexes))
     }
 }
 
@@ -331,7 +332,11 @@ impl StorageManager {
                     }
                     _ => std::cmp::Ordering::Equal,
                 };
-                if asc { ord } else { ord.reverse() }
+                if asc {
+                    ord
+                } else {
+                    ord.reverse()
+                }
             });
         }
 
@@ -339,7 +344,11 @@ impl StorageManager {
             results.truncate(limit);
         }
 
-        tracing::debug!(count = results.len(), "fallback_query_all returned {} records", results.len());
+        tracing::debug!(
+            count = results.len(),
+            "fallback_query_all returned {} records",
+            results.len()
+        );
         Ok(results)
     }
 
@@ -357,18 +366,31 @@ impl StorageManager {
             _ => None,
         };
 
-        let has_candidate_backends =
-            filter.graph_match.is_some() || filter.semantic_match.is_some() || filter.cypher_query.is_some();
+        let has_candidate_backends = filter.graph_match.is_some()
+            || filter.semantic_match.is_some()
+            || filter.cypher_query.is_some();
 
         // When graph/semantic backends will produce candidate IDs, defer limit
         // to after filtering + scoring so the relational backend doesn't
         // prematurely truncate results.
-        let deferred_limit = if has_candidate_backends { filter.limit } else { None };
+        let deferred_limit = if has_candidate_backends {
+            filter.limit
+        } else {
+            None
+        };
 
         let filter = if score_order.is_some() || has_candidate_backends {
             &QueryFilter {
-                order_by: if score_order.is_some() { None } else { filter.order_by.clone() },
-                limit: if has_candidate_backends { None } else { filter.limit },
+                order_by: if score_order.is_some() {
+                    None
+                } else {
+                    filter.order_by.clone()
+                },
+                limit: if has_candidate_backends {
+                    None
+                } else {
+                    filter.limit
+                },
                 ..filter.clone()
             }
         } else {
@@ -565,12 +587,13 @@ impl StorageManager {
         &self,
         type_name: &str,
         fields: &[(String, String)],
+        indexes: &[String],
     ) -> StorageResult<()> {
         if let Some(ref r) = self.relational {
-            r.ensure_table(type_name, fields).await?;
+            r.ensure_table(type_name, fields, indexes).await?;
         }
         if let Some(ref v) = self.vector {
-            v.ensure_table(type_name, fields).await?;
+            v.ensure_table(type_name, fields, indexes).await?;
         }
         Ok(())
     }

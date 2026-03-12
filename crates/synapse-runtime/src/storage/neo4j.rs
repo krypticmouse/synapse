@@ -31,6 +31,7 @@ impl Neo4jBackend {
         &self,
         _type_name: &str,
         _fields: &[(String, String)],
+        _indexes: &[String],
     ) -> StorageResult<()> {
         // Neo4j doesn't require table creation, nodes are schema-free
         Ok(())

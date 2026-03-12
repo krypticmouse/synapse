@@ -230,6 +230,26 @@ async fn eval_call(env: &mut ExecEnv, func: &Expr, args: &[CallArg]) -> anyhow::
 
         "store" => {
             if let Some(Value::Record(record)) = arg_values.first() {
+                let invariants = env
+                    .memories
+                    .get(&record.type_name)
+                    .map(|m| m.invariants.clone())
+                    .unwrap_or_default();
+                let type_name = record.type_name.clone();
+                for invariant in &invariants {
+                    env.push_scope();
+                    for (field_name, field_val) in &record.fields {
+                        env.set(field_name, field_val.clone());
+                    }
+                    let result = eval_expr(env, invariant).await?;
+                    env.pop_scope();
+                    if !result.is_truthy() {
+                        anyhow::bail!(
+                            "invariant violation in '{}': condition evaluated to false",
+                            type_name
+                        );
+                    }
+                }
                 let conflict_handled = try_on_conflict(env, record).await?;
                 if !conflict_handled {
                     env.storage.store(record).await?;
@@ -509,7 +529,8 @@ async fn eval_call(env: &mut ExecEnv, func: &Expr, args: &[CallArg]) -> anyhow::
                     env.handlers.clone(),
                     env.extern_fns.clone(),
                 )
-                .with_queries(env.queries.clone());
+                .with_queries(env.queries.clone())
+                .with_memories(env.memories.clone());
 
                 for (param, val) in query_def.params.iter().zip(arg_values.iter()) {
                     child_env.set(&param.name, val.clone());
