@@ -18,6 +18,7 @@ pub struct PolicyScheduler {
     handlers: Arc<HashMap<String, HandlerDef>>,
     extern_fns: Arc<HashMap<String, ExternFnDef>>,
     queries: Arc<HashMap<String, QueryDef>>,
+    updates: Arc<HashMap<String, UpdateDef>>,
     running: Arc<RwLock<bool>>,
 }
 
@@ -30,6 +31,7 @@ impl PolicyScheduler {
         handlers: Arc<HashMap<String, HandlerDef>>,
         extern_fns: Arc<HashMap<String, ExternFnDef>>,
         queries: Arc<HashMap<String, QueryDef>>,
+        updates: Arc<HashMap<String, UpdateDef>>,
     ) -> Self {
         let mut periodic_rules = Vec::new();
 
@@ -43,7 +45,8 @@ impl PolicyScheduler {
             handlers,
             extern_fns,
             queries,
-            running: Arc::new(RwLock::new(false)),
+            updates,
+            running: Arc::new(RwLock::new(true)),
         }
     }
 
@@ -59,34 +62,51 @@ impl PolicyScheduler {
             let handlers = self.handlers.clone();
             let extern_fns = self.extern_fns.clone();
             let queries = self.queries.clone();
+            let updates = self.updates.clone();
             let running = self.running.clone();
             let interval = std::time::Duration::from_secs(*interval_secs);
             let update_def = update_def.clone();
 
+            let target_name = target.clone();
             let handle = tokio::spawn(async move {
-                let mut ticker = tokio::time::interval(interval);
+                tracing::info!(rule_target = %target_name, "periodic task loop starting");
+                // Skip initial immediate tick — wait for the first real interval
+                tokio::time::sleep(interval).await;
                 loop {
-                    ticker.tick().await;
-
                     if !*running.read().await {
+                        tracing::info!(rule_target = %target_name, "periodic task stopping");
                         break;
                     }
 
-                    let mut env = ExecEnv::new(
-                        storage.clone(),
-                        llm.clone(),
-                        embedder.clone(),
-                        handlers.clone(),
-                        extern_fns.clone(),
-                    )
-                    .with_queries(queries.clone());
-                    if let Err(e) = update::exec_every(&mut env, &update_def).await {
-                        tracing::error!(
-                            error = %e,
-                            target = %update_def.target,
-                            "periodic update rule failed"
-                        );
+                    tracing::info!(rule_target = %target_name, "periodic tick firing");
+
+                    let result = std::panic::AssertUnwindSafe(async {
+                        let mut env = ExecEnv::new(
+                            storage.clone(),
+                            llm.clone(),
+                            embedder.clone(),
+                            handlers.clone(),
+                            extern_fns.clone(),
+                        )
+                        .with_queries(queries.clone())
+                        .with_updates(updates.clone());
+                        update::exec_every(&mut env, &update_def).await
+                    });
+
+                    match result.await {
+                        Ok(()) => {
+                            tracing::info!(rule_target = %target_name, "periodic tick completed");
+                        }
+                        Err(e) => {
+                            tracing::error!(
+                                error = %e,
+                                rule_target = %target_name,
+                                "periodic update rule failed"
+                            );
+                        }
                     }
+
+                    tokio::time::sleep(interval).await;
                 }
             });
 

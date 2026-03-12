@@ -230,8 +230,11 @@ async fn eval_call(env: &mut ExecEnv, func: &Expr, args: &[CallArg]) -> anyhow::
 
         "store" => {
             if let Some(Value::Record(record)) = arg_values.first() {
-                env.storage.store(record).await?;
-                env.stored_count += 1;
+                let conflict_handled = try_on_conflict(env, record).await?;
+                if !conflict_handled {
+                    env.storage.store(record).await?;
+                    env.stored_count += 1;
+                }
             }
             Ok(Value::Null)
         }
@@ -549,6 +552,76 @@ async fn eval_call(env: &mut ExecEnv, func: &Expr, args: &[CallArg]) -> anyhow::
             Ok(Value::Null)
         }
     }
+}
+
+/// Check if a record conflicts with an existing one and run on_conflict if so.
+/// Returns true if on_conflict handled the record (caller should NOT store).
+async fn try_on_conflict(env: &mut ExecEnv, new_record: &Record) -> anyhow::Result<bool> {
+    let update_def = match env.updates.get(&new_record.type_name) {
+        Some(u) => u.clone(),
+        None => return Ok(false),
+    };
+
+    let has_on_conflict = update_def
+        .rules
+        .iter()
+        .any(|r| matches!(r, synapse_core::ast::UpdateRule::OnConflict { .. }));
+    if !has_on_conflict {
+        return Ok(false);
+    }
+
+    // Build conflict key from the record's fields.
+    // SPO triples: subject + predicate is the natural conflict key.
+    // Generic fallback: all @index fields (future), or no conflict detection.
+    let subject = new_record.fields.get("subject").and_then(|v| v.as_str());
+    let predicate = new_record.fields.get("predicate").and_then(|v| v.as_str());
+
+    let (subj, pred) = match (subject, predicate) {
+        (Some(s), Some(p)) => (s.to_string(), p.to_string()),
+        _ => return Ok(false), // no conflict key — store normally
+    };
+
+    use crate::storage::{Condition, ConditionOp, QueryFilter};
+    let filter = QueryFilter {
+        conditions: vec![
+            Condition {
+                field: "subject".into(),
+                op: ConditionOp::Eq,
+                value: Value::String(subj),
+            },
+            Condition {
+                field: "predicate".into(),
+                op: ConditionOp::Eq,
+                value: Value::String(pred),
+            },
+        ],
+        ..Default::default()
+    };
+
+    let existing = env
+        .storage
+        .query(&new_record.type_name, &filter)
+        .await
+        .unwrap_or_default();
+
+    if existing.is_empty() {
+        return Ok(false);
+    }
+
+    for old in &existing {
+        if old.id == new_record.id {
+            continue; // same record, not a conflict
+        }
+        tracing::info!(
+            type_name = %new_record.type_name,
+            old_id = %old.id,
+            new_id = %new_record.id,
+            "conflict detected, running on_conflict"
+        );
+        super::update::exec_on_conflict(env, &update_def, &old.id, new_record).await?;
+    }
+
+    Ok(true)
 }
 
 /// Convert a Value to a text string for LLM consumption.

@@ -109,11 +109,6 @@ namespace zep_agent {
   # === UPDATE RULES ===
   
   update Fact {
-    on_access {
-      # Track access for relevance scoring
-      accessed_at = now()
-    }
-
     on_conflict(old, new) {
       # Temporal superseding: mark old as invalid, link to new
       if new.valid_from > old.valid_from {

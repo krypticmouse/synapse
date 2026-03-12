@@ -121,6 +121,7 @@ pub async fn run(file: &str, port: Option<u16>, daemon: bool) -> anyhow::Result<
         runtime.handlers.clone(),
         runtime.extern_fns.clone(),
         runtime.queries.clone(),
+        runtime.updates.clone(),
     );
     let _policy_handles = scheduler.start();
 

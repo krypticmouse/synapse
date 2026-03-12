@@ -277,6 +277,72 @@ impl StorageManager {
         Ok(results)
     }
 
+    /// Fallback: fetch all records of a type from graph/vector and apply
+    /// filter conditions in memory. Used when relational backend is empty.
+    async fn fallback_query_all(
+        &self,
+        type_name: &str,
+        filter: &QueryFilter,
+    ) -> StorageResult<Vec<Record>> {
+        let mut results = Vec::new();
+
+        if let Some(ref g) = self.graph {
+            results = g.query(type_name, &QueryFilter::default()).await?;
+        }
+        if results.is_empty() {
+            if let Some(ref v) = self.vector {
+                results = v.query(type_name, &QueryFilter::default()).await?;
+            }
+        }
+
+        fn matches_cond(field_val: &Value, op: &ConditionOp, target: &Value) -> bool {
+            match op {
+                ConditionOp::Eq => field_val == target,
+                ConditionOp::Ne => field_val != target,
+                ConditionOp::Lt | ConditionOp::Le | ConditionOp::Gt | ConditionOp::Ge => true,
+            }
+        }
+
+        for c in &filter.conditions {
+            results.retain(|r| {
+                let fv = r.fields.get(&c.field).unwrap_or(&Value::Null);
+                matches_cond(fv, &c.op, &c.value)
+            });
+        }
+
+        if !filter.or_conditions.is_empty() {
+            results.retain(|r| {
+                filter.or_conditions.iter().any(|c| {
+                    let fv = r.fields.get(&c.field).unwrap_or(&Value::Null);
+                    matches_cond(fv, &c.op, &c.value)
+                })
+            });
+        }
+
+        if let Some((ref field, asc)) = filter.order_by {
+            results.sort_by(|a, b| {
+                let va = a.fields.get(field);
+                let vb = b.fields.get(field);
+                let ord = match (va, vb) {
+                    (Some(Value::String(sa)), Some(Value::String(sb))) => sa.cmp(sb),
+                    (Some(Value::Int(ia)), Some(Value::Int(ib))) => ia.cmp(ib),
+                    (Some(Value::Float(fa)), Some(Value::Float(fb))) => {
+                        fa.partial_cmp(fb).unwrap_or(std::cmp::Ordering::Equal)
+                    }
+                    _ => std::cmp::Ordering::Equal,
+                };
+                if asc { ord } else { ord.reverse() }
+            });
+        }
+
+        if let Some(limit) = filter.limit {
+            results.truncate(limit);
+        }
+
+        tracing::debug!(count = results.len(), "fallback_query_all returned {} records", results.len());
+        Ok(results)
+    }
+
     /// Query with multi-backend support.
     ///
     /// Strategy: gather candidate IDs from graph and semantic backends,
@@ -422,6 +488,9 @@ impl StorageManager {
                     "filtered relational results by candidate IDs"
                 );
             }
+        } else if results.is_empty() && (self.graph.is_some() || self.vector.is_some()) {
+            tracing::debug!("relational empty, falling back to graph/vector backends");
+            results = self.fallback_query_all(type_name, filter).await?;
         }
 
         for (field, re) in &filter.regex_filters {

@@ -26,7 +26,7 @@ pub struct Runtime {
     /// Registered query definitions indexed by query name
     pub queries: Arc<HashMap<String, QueryDef>>,
     /// Registered update definitions indexed by memory type
-    pub updates: HashMap<String, UpdateDef>,
+    pub updates: Arc<HashMap<String, UpdateDef>>,
     /// Memory schemas: type_name -> fields
     memories: HashMap<String, Vec<FieldDef>>,
     pub extern_fns: Arc<HashMap<String, ExternFnDef>>,
@@ -73,7 +73,7 @@ impl Runtime {
             program,
             handlers: Arc::new(handlers),
             queries: Arc::new(queries),
-            updates,
+            updates: Arc::new(updates),
             memories,
             extern_fns: Arc::new(extern_fns),
             source_file: None,
@@ -119,7 +119,7 @@ impl Runtime {
         self.program = program;
         self.handlers = Arc::new(handlers);
         self.queries = Arc::new(queries);
-        self.updates = updates;
+        self.updates = Arc::new(updates);
         self.memories = memories;
         self.extern_fns = Arc::new(extern_fns);
 
@@ -158,7 +158,8 @@ impl Runtime {
             self.handlers.clone(),
             self.extern_fns.clone(),
         )
-        .with_queries(self.queries.clone());
+        .with_queries(self.queries.clone())
+        .with_updates(self.updates.clone());
 
         // Bind handler parameters from the payload
         if let serde_json::Value::Object(map) = &payload {
@@ -200,7 +201,8 @@ impl Runtime {
             self.handlers.clone(),
             self.extern_fns.clone(),
         )
-        .with_queries(self.queries.clone());
+        .with_queries(self.queries.clone())
+        .with_updates(self.updates.clone());
 
         // Bind query parameters
         if let serde_json::Value::Object(map) = &params {
@@ -246,6 +248,7 @@ pub struct ExecEnv {
     pub handlers: Arc<HashMap<String, HandlerDef>>,
     pub extern_fns: Arc<HashMap<String, ExternFnDef>>,
     pub queries: Arc<HashMap<String, QueryDef>>,
+    pub updates: Arc<HashMap<String, UpdateDef>>,
     scopes: Vec<HashMap<String, Value>>,
     pub stored_count: u64,
 }
@@ -265,6 +268,7 @@ impl ExecEnv {
             handlers,
             extern_fns,
             queries: Arc::new(HashMap::new()),
+            updates: Arc::new(HashMap::new()),
             scopes: vec![HashMap::new()],
             stored_count: 0,
         }
@@ -272,6 +276,11 @@ impl ExecEnv {
 
     pub fn with_queries(mut self, queries: Arc<HashMap<String, QueryDef>>) -> Self {
         self.queries = queries;
+        self
+    }
+
+    pub fn with_updates(mut self, updates: Arc<HashMap<String, UpdateDef>>) -> Self {
+        self.updates = updates;
         self
     }
 

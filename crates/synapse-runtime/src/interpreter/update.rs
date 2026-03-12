@@ -74,10 +74,13 @@ pub async fn exec_on_conflict(
 pub async fn exec_every(env: &mut ExecEnv, update: &UpdateDef) -> anyhow::Result<()> {
     for rule in &update.rules {
         if let UpdateRule::Every { body, .. } = rule {
+            tracing::info!(target = %update.target, "exec_every: querying records");
             let records = env
                 .storage
                 .query(&update.target, &QueryFilter::default())
                 .await?;
+
+            tracing::info!(target = %update.target, count = records.len(), "exec_every: found {} records", records.len());
 
             for record in records {
                 env.push_scope();
