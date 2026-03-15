@@ -11,9 +11,9 @@ name = "synapse"
 path = "src/main.rs"
 
 [dependencies]
-synapse-dsl = { path = "../synapse-dsl" }
-synapse-runtime = { path = "../synapse-runtime" }
-synapse-sdk = { path = "../synapse-sdk" }
+synapse-dsl = { path = "../synapse-dsl", version = "0.1.0" }
+synapse-runtime = { path = "../synapse-runtime", version = "0.1.0" }
+synapse-sdk = { path = "../synapse-sdk", version = "0.1.0" }
 clap = { workspace = true }
 tokio = { workspace = true }
 serde = { workspace = true }
