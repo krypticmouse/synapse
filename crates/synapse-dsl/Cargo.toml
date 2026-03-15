@@ -1,5 +1,5 @@
 [package]
-name = "synapse-core"
+name = "synapse-dsl"
 version = "0.1.0"
 edition = "2021"
 description = "DSL parser for Synapse memory configuration language (.mnm)"

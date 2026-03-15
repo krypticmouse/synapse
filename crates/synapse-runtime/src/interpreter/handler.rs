@@ -1,5 +1,5 @@
 use chrono::Utc;
-use synapse_core::ast::*;
+use synapse_dsl::ast::*;
 
 use super::ExecEnv;
 use crate::value::{Record, Value};
@@ -586,7 +586,7 @@ async fn try_on_conflict(env: &mut ExecEnv, new_record: &Record) -> anyhow::Resu
     let has_on_conflict = update_def
         .rules
         .iter()
-        .any(|r| matches!(r, synapse_core::ast::UpdateRule::OnConflict { .. }));
+        .any(|r| matches!(r, synapse_dsl::ast::UpdateRule::OnConflict { .. }));
     if !has_on_conflict {
         return Ok(false);
     }

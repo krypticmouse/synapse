@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use synapse_core::ast::*;
+use synapse_dsl::ast::*;
 use tokio::sync::RwLock;
 
 use super::update;
@@ -25,7 +25,7 @@ pub struct PolicyScheduler {
 
 impl PolicyScheduler {
     pub fn from_program(
-        program: &synapse_core::ast::Program,
+        program: &synapse_dsl::ast::Program,
         storage: Arc<StorageManager>,
         llm: Option<Arc<LlmClient>>,
         embedder: Option<Arc<EmbeddingClient>>,

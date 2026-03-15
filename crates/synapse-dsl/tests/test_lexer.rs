@@ -1,5 +1,5 @@
 use logos::Logos;
-use synapse_core::lexer::*;
+use synapse_dsl::lexer::*;
 
 #[test]
 fn keywords() {

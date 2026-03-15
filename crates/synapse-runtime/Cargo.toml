@@ -7,7 +7,7 @@ license = "MIT"
 repository = "https://github.com/krypticmouse/synapse"
 
 [dependencies]
-synapse-core = { path = "../synapse-core" }
+synapse-dsl = { path = "../synapse-dsl" }
 tokio = { workspace = true }
 axum = { workspace = true }
 serde = { workspace = true }

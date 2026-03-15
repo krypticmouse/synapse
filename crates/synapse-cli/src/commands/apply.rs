@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::Path;
 
-use synapse_core::ast::Item;
+use synapse_dsl::ast::Item;
 use synapse_runtime::config::{GraphConfig, RuntimeConfig, VectorConfig};
 use synapse_runtime::llm::{EmbeddingClient, LlmClient};
 use synapse_runtime::storage::neo4j::Neo4jBackend;
@@ -14,8 +14,8 @@ pub async fn run(file: &str, port: Option<u16>, daemon: bool) -> anyhow::Result<
     println!("Applying {file}...");
 
     let source = fs::read_to_string(file)?;
-    let program = synapse_core::parser::parse(&source)?;
-    synapse_core::typeck::check(&program)?;
+    let program = synapse_dsl::parser::parse(&source)?;
+    synapse_dsl::typeck::check(&program)?;
     println!("  ✓ Compiled successfully");
 
     // Extract config

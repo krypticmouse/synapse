@@ -1,4 +1,4 @@
-use synapse_core::ast::*;
+use synapse_dsl::ast::*;
 
 use super::handler::exec_stmts;
 use super::ExecEnv;

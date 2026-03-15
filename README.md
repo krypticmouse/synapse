@@ -496,7 +496,7 @@ expr                       # bare expression (e.g. function call)
 ```
 synapse/
 ├── crates/
-│   ├── synapse-core/       # Lexer, parser, AST, type system, type checker
+│   ├── synapse-dsl/       # Lexer, parser, AST, type system, type checker
 │   ├── synapse-runtime/    # Interpreter, storage backends, HTTP server, LLM
 │   ├── synapse-cli/        # CLI binary (apply, emit, query, inspect, ...)
 │   ├── synapse-sdk/        # Rust HTTP client library
@@ -524,7 +524,7 @@ synapse/
                          └────────┘  └─────────┘  └────────┘
 ```
 
-1. **Parse** — `synapse-core` lexes and parses `.mnm` into an AST (`Program`)
+1. **Parse** — `synapse-dsl` lexes and parses `.mnm` into an AST (`Program`)
 2. **Type check** — validates schemas, handler params, query bodies
 3. **Runtime init** — `Runtime` registers handlers, queries, update rules; `StorageManager` connects backends; `PolicyScheduler` starts periodic rules
 4. **HTTP server** — Axum-based server exposes `/emit`, `/query`, `/inspect`, etc.

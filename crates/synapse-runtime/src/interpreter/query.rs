@@ -1,4 +1,4 @@
-use synapse_core::ast::*;
+use synapse_dsl::ast::*;
 
 use super::handler::eval_expr;
 use super::ExecEnv;
@@ -171,8 +171,8 @@ async fn extract_conditions(env: &mut ExecEnv, expr: &Expr, filter: &mut QueryFi
                             .find_map(|a| {
                                 if a.name.as_deref() == Some("threshold") {
                                     match &a.value {
-                                        synapse_core::ast::Expr::Float(f) => Some(*f),
-                                        synapse_core::ast::Expr::Int(n) => Some(*n as f64),
+                                        synapse_dsl::ast::Expr::Float(f) => Some(*f),
+                                        synapse_dsl::ast::Expr::Int(n) => Some(*n as f64),
                                         _ => None,
                                     }
                                 } else {

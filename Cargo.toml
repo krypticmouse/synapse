@@ -1,7 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/synapse-core",
+    "crates/synapse-dsl",
     "crates/synapse-runtime",
     "crates/synapse-cli",
     "crates/synapse-sdk",

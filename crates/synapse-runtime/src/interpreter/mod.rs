@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use chrono::Utc;
-use synapse_core::ast::*;
+use synapse_dsl::ast::*;
 use tokio::sync::RwLock;
 
 use crate::llm::{EmbeddingClient, LlmClient};
@@ -98,8 +98,8 @@ impl Runtime {
             .ok_or_else(|| anyhow::anyhow!("no source file configured for reload"))?;
 
         let source = std::fs::read_to_string(path)?;
-        let program = synapse_core::parser::parse(&source)?;
-        synapse_core::typeck::check(&program)?;
+        let program = synapse_dsl::parser::parse(&source)?;
+        synapse_dsl::typeck::check(&program)?;
 
         let mut handlers = HashMap::new();
         let mut queries = HashMap::new();
@@ -353,17 +353,17 @@ fn collect_definitions(
     }
 }
 
-fn type_to_storage_string(ty: &synapse_core::types::Type) -> String {
+fn type_to_storage_string(ty: &synapse_dsl::types::Type) -> String {
     match ty {
-        synapse_core::types::Type::String => "string".into(),
-        synapse_core::types::Type::Int => "int".into(),
-        synapse_core::types::Type::Float | synapse_core::types::Type::BoundedFloat { .. } => {
+        synapse_dsl::types::Type::String => "string".into(),
+        synapse_dsl::types::Type::Int => "int".into(),
+        synapse_dsl::types::Type::Float | synapse_dsl::types::Type::BoundedFloat { .. } => {
             "float".into()
         }
-        synapse_core::types::Type::Bool => "bool".into(),
-        synapse_core::types::Type::Timestamp => "timestamp".into(),
-        synapse_core::types::Type::Optional(inner) => type_to_storage_string(inner),
-        synapse_core::types::Type::Array(_) => "string".into(), // JSON-serialized
-        synapse_core::types::Type::Named(_) => "string".into(), // foreign key
+        synapse_dsl::types::Type::Bool => "bool".into(),
+        synapse_dsl::types::Type::Timestamp => "timestamp".into(),
+        synapse_dsl::types::Type::Optional(inner) => type_to_storage_string(inner),
+        synapse_dsl::types::Type::Array(_) => "string".into(), // JSON-serialized
+        synapse_dsl::types::Type::Named(_) => "string".into(), // foreign key
     }
 }

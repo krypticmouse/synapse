@@ -2465,7 +2465,7 @@ dependencies = [
  "clap",
  "serde",
  "serde_json",
- "synapse-core",
+ "synapse-dsl",
  "synapse-runtime",
  "synapse-sdk",
  "tokio",
@@ -2475,7 +2475,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "synapse-core"
+name = "synapse-dsl"
 version = "0.1.0"
 dependencies = [
  "ariadne",
@@ -2499,7 +2499,7 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
- "synapse-core",
+ "synapse-dsl",
  "thiserror 2.0.18",
  "tokio",
  "tower-http",

@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use synapse_core::ast::{ConfigBlock, ConfigValue};
+use synapse_dsl::ast::{ConfigBlock, ConfigValue};
 
 /// Runtime configuration parsed from the DSL config block.
 #[derive(Debug, Clone, Serialize, Deserialize)]

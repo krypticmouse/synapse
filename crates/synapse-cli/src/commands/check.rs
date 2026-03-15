@@ -6,7 +6,7 @@ pub fn run(file: &str) -> anyhow::Result<()> {
     let source = fs::read_to_string(file)?;
 
     // Parse
-    let program = match synapse_core::parser::parse(&source) {
+    let program = match synapse_dsl::parser::parse(&source) {
         Ok(p) => {
             println!("  ✓ Syntax valid");
             p
@@ -18,7 +18,7 @@ pub fn run(file: &str) -> anyhow::Result<()> {
     };
 
     // Type check
-    match synapse_core::typeck::check(&program) {
+    match synapse_dsl::typeck::check(&program) {
         Ok(_env) => {
             println!("  ✓ Types valid");
         }
@@ -55,7 +55,7 @@ pub fn run(file: &str) -> anyhow::Result<()> {
 }
 
 fn count_items(
-    items: &[synapse_core::ast::Item],
+    items: &[synapse_dsl::ast::Item],
     memories: &mut usize,
     handlers: &mut usize,
     queries: &mut usize,
@@ -65,18 +65,18 @@ fn count_items(
 ) {
     for item in items {
         match item {
-            synapse_core::ast::Item::Memory(_) => *memories += 1,
-            synapse_core::ast::Item::Handler(_) => *handlers += 1,
-            synapse_core::ast::Item::Query(_) => *queries += 1,
-            synapse_core::ast::Item::Update(_) => *updates += 1,
-            synapse_core::ast::Item::Policy(_) => *policies += 1,
-            synapse_core::ast::Item::ExternFn(_) => *extern_fns += 1,
-            synapse_core::ast::Item::Namespace(ns) => {
+            synapse_dsl::ast::Item::Memory(_) => *memories += 1,
+            synapse_dsl::ast::Item::Handler(_) => *handlers += 1,
+            synapse_dsl::ast::Item::Query(_) => *queries += 1,
+            synapse_dsl::ast::Item::Update(_) => *updates += 1,
+            synapse_dsl::ast::Item::Policy(_) => *policies += 1,
+            synapse_dsl::ast::Item::ExternFn(_) => *extern_fns += 1,
+            synapse_dsl::ast::Item::Namespace(ns) => {
                 count_items(
                     &ns.items, memories, handlers, queries, updates, policies, extern_fns,
                 );
             }
-            synapse_core::ast::Item::Config(_) => {}
+            synapse_dsl::ast::Item::Config(_) => {}
         }
     }
 }
