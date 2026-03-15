@@ -74,8 +74,6 @@ namespace zep_agent {
   # === QUERIES ===
   
   # Hybrid retrieval: semantic + graph, ranked by _score
-  # Example: synapse query GetContext '{"input": "Where does Alice work?"}'
-  # Example: synapse query GetContext '{"input": "Who is the manager of Alice?"}'
   query GetContext(input: string): Fact[] {
     from Fact
     where semantic_match(input, threshold: 0.6)
@@ -86,8 +84,6 @@ namespace zep_agent {
   }
 
   # Entity timeline: all facts about an entity, chronological
-  # Example: synapse query EntityHistory '{"entity_name": "Alice"}'
-  # Example: synapse query EntityHistory '{"entity_name": "Acme Corp"}'
   query EntityHistory(entity_name: string): Fact[] {
     from Fact
     where subject == entity_name or object == entity_name
@@ -95,8 +91,6 @@ namespace zep_agent {
   }
 
   # Cypher: entities connected within 2 hops in the knowledge graph
-  # Example: synapse query RelatedEntities '{"entity": "Alice"}'
-  # Example: synapse query RelatedEntities '{"entity": "Bob"}'
   query RelatedEntities(entity: string): Entity[] {
     from Entity
     where cypher("

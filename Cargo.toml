@@ -5,8 +5,8 @@ members = [
     "crates/synapse-runtime",
     "crates/synapse-cli",
     "crates/synapse-sdk",
-    "crates/synapse-python",
 ]
+exclude = ["crates/synapse-python"]
 
 [workspace.dependencies]
 # Serialization
