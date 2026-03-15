@@ -21,14 +21,14 @@ pub async fn run() -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn get_client_from_state() -> anyhow::Result<synapse_sdk::Client> {
+pub fn get_client_from_state() -> anyhow::Result<synapse_client::Client> {
     // Try to read state file for the address
     if let Ok(state) = std::fs::read_to_string(".synapse/state.json") {
         if let Ok(json) = serde_json::from_str::<serde_json::Value>(&state) {
             if let Some(addr) = json["addr"].as_str() {
-                return Ok(synapse_sdk::Client::new(&format!("http://{addr}")));
+                return Ok(synapse_client::Client::new(&format!("http://{addr}")));
             }
         }
     }
-    Ok(synapse_sdk::Client::new("http://localhost:8080"))
+    Ok(synapse_client::Client::new("http://localhost:8080"))
 }

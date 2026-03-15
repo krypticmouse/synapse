@@ -499,7 +499,7 @@ synapse/
 │   ├── synapse-dsl/       # Lexer, parser, AST, type system, type checker
 │   ├── synapse-runtime/    # Interpreter, storage backends, HTTP server, LLM
 │   ├── synapse-cli/        # CLI binary (apply, emit, query, inspect, ...)
-│   ├── synapse-sdk/        # Rust HTTP client library
+│   ├── synapse-client/        # Rust HTTP client library
 │   └── synapse-python/     # Python bindings via PyO3
 └── examples/               # .mnm example files
 ```
@@ -620,7 +620,7 @@ print(notes)
 ### Rust
 
 ```rust
-use synapse_sdk::Client;
+use synapse_client::Client;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

@@ -1,10 +1,10 @@
 use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
 
-/// Python wrapper around `synapse_sdk::Client`.
+/// Python wrapper around `synapse_client::Client`.
 #[pyclass]
 struct SynapseClient {
-    client: synapse_sdk::Client,
+    client: synapse_client::Client,
     rt: tokio::runtime::Runtime,
 }
 
@@ -18,9 +18,9 @@ impl SynapseClient {
 
         let client = match timeout_secs {
             Some(secs) => {
-                synapse_sdk::Client::with_timeout(base_url, std::time::Duration::from_secs(secs))
+                synapse_client::Client::with_timeout(base_url, std::time::Duration::from_secs(secs))
             }
-            None => synapse_sdk::Client::new(base_url),
+            None => synapse_client::Client::new(base_url),
         };
 
         Ok(Self { client, rt })

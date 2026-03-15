@@ -1131,23 +1131,23 @@ dependencies = [
 ]
 
 [[package]]
-name = "synapse-python"
-version = "0.1.0"
-dependencies = [
- "pyo3",
- "serde_json",
- "synapse-sdk",
- "tokio",
-]
-
-[[package]]
-name = "synapse-sdk"
+name = "synapse-client"
 version = "0.1.0"
 dependencies = [
  "reqwest",
  "serde",
  "serde_json",
  "thiserror",
+ "tokio",
+]
+
+[[package]]
+name = "synapse-python"
+version = "0.1.0"
+dependencies = [
+ "pyo3",
+ "serde_json",
+ "synapse-client",
  "tokio",
 ]
 

@@ -16,7 +16,7 @@ pub type Result<T> = std::result::Result<T, SynapseClientError>;
 /// Synapse client — connects to a running Synapse runtime over HTTP.
 ///
 /// ```rust,no_run
-/// use synapse_sdk::Client;
+/// use synapse_client::Client;
 ///
 /// #[tokio::main]
 /// async fn main() {
