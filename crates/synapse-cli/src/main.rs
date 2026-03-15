@@ -3,7 +3,7 @@ use clap::{Parser, Subcommand};
 mod commands;
 
 #[derive(Parser)]
-#[command(name = "synapse", version, about = "Terraform for Agent Memory")]
+#[command(name = "synapse", version, about = "Configuration Language for Memory Systems")]
 struct Cli {
     #[command(subcommand)]
     command: Command,

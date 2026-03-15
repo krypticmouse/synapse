@@ -2,6 +2,9 @@
 name = "synapse-runtime"
 version = "0.1.0"
 edition = "2021"
+description = "Multi-backend runtime for Synapse memory systems (SQLite, Qdrant, Neo4j)"
+license = "MIT"
+repository = "https://github.com/krypticmouse/synapse"
 
 [dependencies]
 synapse-core = { path = "../synapse-core" }

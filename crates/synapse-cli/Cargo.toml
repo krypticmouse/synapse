@@ -2,6 +2,9 @@
 name = "synapse-cli"
 version = "0.1.0"
 edition = "2021"
+description = "CLI for Synapse - Configuration Language for Memory Systems"
+license = "MIT"
+repository = "https://github.com/krypticmouse/synapse"
 
 [[bin]]
 name = "synapse"

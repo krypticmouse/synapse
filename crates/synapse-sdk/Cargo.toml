@@ -2,6 +2,9 @@
 name = "synapse-sdk"
 version = "0.1.0"
 edition = "2021"
+description = "Rust client SDK for Synapse memory runtime"
+license = "MIT"
+repository = "https://github.com/krypticmouse/synapse"
 
 [dependencies]
 reqwest = { workspace = true }

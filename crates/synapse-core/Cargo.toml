@@ -2,6 +2,9 @@
 name = "synapse-core"
 version = "0.1.0"
 edition = "2021"
+description = "DSL parser for Synapse memory configuration language (.mnm)"
+license = "MIT"
+repository = "https://github.com/krypticmouse/synapse"
 
 [dependencies]
 logos = "0.16"
