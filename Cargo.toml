@@ -8,6 +8,10 @@ members = [
 ]
 exclude = ["crates/synapse-python"]
 
+[patch.crates-io]
+# Use local synapse-client during development
+synapse-client = { path = "crates/synapse-client" }
+
 [workspace.dependencies]
 # Serialization
 serde = { version = "1", features = ["derive"] }
