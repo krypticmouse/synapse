@@ -2,9 +2,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
-use synapse_channels::ChannelEvent;
 use synapse_channels::manager::ChannelManager;
 use synapse_channels::registry;
+use synapse_channels::ChannelEvent;
 use synapse_dsl::ast::ChannelDef;
 use tokio::sync::RwLock;
 
@@ -18,18 +18,22 @@ pub async fn setup_channels(
     let mut manager = ChannelManager::new();
 
     for (name, ch_cfg) in channel_configs {
-        let connector = registry::create_connector(&ch_cfg.source)
-            .ok_or_else(|| anyhow::anyhow!(
+        let connector = registry::create_connector(&ch_cfg.source).ok_or_else(|| {
+            anyhow::anyhow!(
                 "unknown channel source '{}' for channel '{}'",
                 ch_cfg.source,
                 name
-            ))?;
+            )
+        })?;
 
         manager
             .register(name.clone(), connector, &ch_cfg.config)
             .await?;
 
-        println!("  \u{2713} Channel [{name}] connected via {}", ch_cfg.source);
+        println!(
+            "  \u{2713} Channel [{name}] connected via {}",
+            ch_cfg.source
+        );
     }
 
     Ok(manager)
@@ -113,8 +117,7 @@ pub fn spawn_event_dispatcher(
                     match target_event {
                         Some("ingest") | None => {
                             if let Some(_ingest_handler) = rt.handlers.get("ingest") {
-                                let json_payload =
-                                    serde_json::Value::Object(payload.clone());
+                                let json_payload = serde_json::Value::Object(payload.clone());
                                 if let Err(e) = rt.emit("ingest", json_payload).await {
                                     tracing::error!(
                                         channel = %ch_def.name,
@@ -149,18 +152,14 @@ pub fn spawn_event_dispatcher(
                                     if let Some(val) = payload.get(&param.name) {
                                         env.set(
                                             &param.name,
-                                            Value::from(
-                                                serde_json::Value::from(val.clone()),
-                                            ),
+                                            Value::from(serde_json::Value::from(val.clone())),
                                         );
                                     }
                                 }
 
-                                if let Err(e) = crate::interpreter::handler::exec_stmts(
-                                    &mut env,
-                                    &handler.body,
-                                )
-                                .await
+                                if let Err(e) =
+                                    crate::interpreter::handler::exec_stmts(&mut env, &handler.body)
+                                        .await
                                 {
                                     tracing::error!(
                                         channel = %ch_def.name,
@@ -172,8 +171,7 @@ pub fn spawn_event_dispatcher(
                             }
                         }
                         Some("update") => {
-                            let json_payload =
-                                serde_json::Value::Object(payload.clone());
+                            let json_payload = serde_json::Value::Object(payload.clone());
                             if let Err(e) = rt.emit("ingest", json_payload).await {
                                 tracing::error!(
                                     channel = %ch_def.name,

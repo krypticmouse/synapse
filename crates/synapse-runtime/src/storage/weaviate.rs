@@ -223,10 +223,7 @@ impl WeaviateBackend {
             .and_then(|v| v.as_array())
         {
             for item in items {
-                let id = item
-                    .get("_id")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or_default();
+                let id = item.get("_id").and_then(|v| v.as_str()).unwrap_or_default();
                 let score = item
                     .pointer("/_additional/certainty")
                     .and_then(|v| v.as_f64())
@@ -268,11 +265,7 @@ impl WeaviateBackend {
         Ok(Some(record))
     }
 
-    pub async fn query(
-        &self,
-        type_name: &str,
-        filter: &QueryFilter,
-    ) -> StorageResult<Vec<Record>> {
+    pub async fn query(&self, type_name: &str, filter: &QueryFilter) -> StorageResult<Vec<Record>> {
         let limit = filter.limit.unwrap_or(100);
         let graphql = serde_json::json!({
             "query": format!(

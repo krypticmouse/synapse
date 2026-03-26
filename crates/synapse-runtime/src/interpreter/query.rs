@@ -15,7 +15,10 @@ pub async fn exec_query_body(env: &mut ExecEnv, body: &QueryBody) -> anyhow::Res
     let mut filter = QueryFilter::default();
 
     // Store the order-by expression for potential expression evaluation
-    let order_expr = body.order_by.as_ref().map(|ob| (ob.expr.clone(), ob.direction));
+    let order_expr = body
+        .order_by
+        .as_ref()
+        .map(|ob| (ob.expr.clone(), ob.direction));
 
     // Simple ident ordering goes to the backend filter
     if let Some((ref expr, dir)) = order_expr {
@@ -58,7 +61,11 @@ pub async fn exec_query_body(env: &mut ExecEnv, body: &QueryBody) -> anyhow::Res
                 let ord = score_a
                     .partial_cmp(&score_b)
                     .unwrap_or(std::cmp::Ordering::Equal);
-                if dir == SortDir::Asc { ord } else { ord.reverse() }
+                if dir == SortDir::Asc {
+                    ord
+                } else {
+                    ord.reverse()
+                }
             });
 
             // Apply limit after expression-based ordering
@@ -77,10 +84,7 @@ fn eval_order_expr(expr: &Expr, val: &Value) -> f64 {
     match expr {
         Expr::Ident(name) => {
             if let Value::Record(r) = val {
-                r.fields
-                    .get(name)
-                    .and_then(|v| v.as_f64())
-                    .unwrap_or(0.0)
+                r.fields.get(name).and_then(|v| v.as_f64()).unwrap_or(0.0)
             } else {
                 0.0
             }
@@ -126,7 +130,10 @@ fn eval_order_expr(expr: &Expr, val: &Value) -> f64 {
         }
         Expr::Call { func, args } => {
             if let Expr::Ident(name) = func.as_ref() {
-                let arg_vals: Vec<f64> = args.iter().map(|a| eval_order_expr(&a.value, val)).collect();
+                let arg_vals: Vec<f64> = args
+                    .iter()
+                    .map(|a| eval_order_expr(&a.value, val))
+                    .collect();
                 match name.as_str() {
                     "min" => arg_vals.iter().copied().fold(f64::INFINITY, f64::min),
                     "max" => arg_vals.iter().copied().fold(f64::NEG_INFINITY, f64::max),
@@ -153,9 +160,7 @@ async fn extract_conditions(env: &mut ExecEnv, expr: &Expr, filter: &mut QueryFi
                         "graph_match" | "cypher" => "graph",
                         _ => "unknown",
                     };
-                    filter
-                        .score_aliases
-                        .insert(alias.clone(), kind.to_string());
+                    filter.score_aliases.insert(alias.clone(), kind.to_string());
                 }
             }
             Box::pin(extract_conditions(env, inner, filter)).await;

@@ -48,11 +48,7 @@ impl StorageBackend {
         }
     }
 
-    pub async fn query(
-        &self,
-        type_name: &str,
-        filter: &QueryFilter,
-    ) -> StorageResult<Vec<Record>> {
+    pub async fn query(&self, type_name: &str, filter: &QueryFilter) -> StorageResult<Vec<Record>> {
         match self {
             StorageBackend::Sqlite(s) => s.query(type_name, filter).await,
         }
@@ -140,11 +136,7 @@ impl VectorBackendKind {
         }
     }
 
-    pub async fn query(
-        &self,
-        type_name: &str,
-        filter: &QueryFilter,
-    ) -> StorageResult<Vec<Record>> {
+    pub async fn query(&self, type_name: &str, filter: &QueryFilter) -> StorageResult<Vec<Record>> {
         match self {
             VectorBackendKind::Qdrant(s) => s.query(type_name, filter).await,
             VectorBackendKind::Pinecone(s) => s.query(type_name, filter).await,
@@ -271,11 +263,7 @@ impl GraphBackendKind {
         }
     }
 
-    pub async fn query(
-        &self,
-        type_name: &str,
-        filter: &QueryFilter,
-    ) -> StorageResult<Vec<Record>> {
+    pub async fn query(&self, type_name: &str, filter: &QueryFilter) -> StorageResult<Vec<Record>> {
         match self {
             GraphBackendKind::Neo4j(s) => s.query(type_name, filter).await,
             GraphBackendKind::Memgraph(s) => s.query(type_name, filter).await,
@@ -411,7 +399,10 @@ impl StorageManager {
     pub fn vector(&self, name: Option<&str>) -> Option<&VectorBackendKind> {
         match name {
             Some(n) => self.vectors.get(n),
-            None => self.vectors.get("default").or_else(|| self.vectors.values().next()),
+            None => self
+                .vectors
+                .get("default")
+                .or_else(|| self.vectors.values().next()),
         }
     }
 
@@ -419,7 +410,10 @@ impl StorageManager {
     pub fn graph(&self, name: Option<&str>) -> Option<&GraphBackendKind> {
         match name {
             Some(n) => self.graphs.get(n),
-            None => self.graphs.get("default").or_else(|| self.graphs.values().next()),
+            None => self
+                .graphs
+                .get("default")
+                .or_else(|| self.graphs.values().next()),
         }
     }
 
@@ -524,7 +518,11 @@ impl StorageManager {
                     (Some(Value::String(sa)), Some(Value::String(sb))) => sa.cmp(sb),
                     _ => std::cmp::Ordering::Equal,
                 };
-                if asc { ord } else { ord.reverse() }
+                if asc {
+                    ord
+                } else {
+                    ord.reverse()
+                }
             });
         }
 
@@ -593,7 +591,11 @@ impl StorageManager {
                     }
                     _ => std::cmp::Ordering::Equal,
                 };
-                if asc { ord } else { ord.reverse() }
+                if asc {
+                    ord
+                } else {
+                    ord.reverse()
+                }
             });
         }
 
@@ -778,11 +780,7 @@ impl StorageManager {
     }
 
     /// Backward-compatible query method (no alias scores)
-    pub async fn query(
-        &self,
-        type_name: &str,
-        filter: &QueryFilter,
-    ) -> StorageResult<Vec<Record>> {
+    pub async fn query(&self, type_name: &str, filter: &QueryFilter) -> StorageResult<Vec<Record>> {
         let (results, _) = self.query_with_scores(type_name, filter).await?;
         Ok(results)
     }
@@ -845,10 +843,7 @@ impl StorageManager {
                     cleared.push(name.to_string());
                 }
             }
-            report.insert(
-                format!("vector_{backend_name}"),
-                serde_json::json!(cleared),
-            );
+            report.insert(format!("vector_{backend_name}"), serde_json::json!(cleared));
         }
 
         for (backend_name, g) in &self.graphs {
@@ -859,10 +854,7 @@ impl StorageManager {
                 }
             }
             let _ = g.clear("Entity").await;
-            report.insert(
-                format!("graph_{backend_name}"),
-                serde_json::json!(cleared),
-            );
+            report.insert(format!("graph_{backend_name}"), serde_json::json!(cleared));
         }
 
         Ok(serde_json::Value::Object(report))
@@ -896,7 +888,10 @@ impl StorageManager {
                         );
                     }
                     Err(e) => {
-                        tables.insert(name.to_string(), serde_json::json!({ "error": e.to_string() }));
+                        tables.insert(
+                            name.to_string(),
+                            serde_json::json!({ "error": e.to_string() }),
+                        );
                     }
                 }
             }
@@ -921,7 +916,10 @@ impl StorageManager {
                         );
                     }
                     Err(e) => {
-                        collections.insert(name.to_string(), serde_json::json!({ "error": e.to_string() }));
+                        collections.insert(
+                            name.to_string(),
+                            serde_json::json!({ "error": e.to_string() }),
+                        );
                     }
                 }
             }
@@ -944,7 +942,10 @@ impl StorageManager {
                         );
                     }
                     Err(e) => {
-                        nodes.insert(name.to_string(), serde_json::json!({ "error": e.to_string() }));
+                        nodes.insert(
+                            name.to_string(),
+                            serde_json::json!({ "error": e.to_string() }),
+                        );
                     }
                 }
             }

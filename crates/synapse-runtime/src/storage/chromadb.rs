@@ -188,7 +188,10 @@ impl ChromaDBBackend {
 
         let mut scored = Vec::new();
         if let (Some(ids), Some(distances)) = (
-            result.get("ids").and_then(|v| v.get(0)).and_then(|v| v.as_array()),
+            result
+                .get("ids")
+                .and_then(|v| v.get(0))
+                .and_then(|v| v.as_array()),
             result
                 .get("distances")
                 .and_then(|v| v.get(0))
@@ -331,10 +334,7 @@ impl ChromaDBBackend {
         if let Ok(collection_id) = self.get_or_create_collection(type_name).await {
             let _ = self
                 .client
-                .delete(format!(
-                    "{}/api/v1/collections/{collection_id}",
-                    self.url
-                ))
+                .delete(format!("{}/api/v1/collections/{collection_id}", self.url))
                 .send()
                 .await;
             self.collections.lock().unwrap().remove(type_name);

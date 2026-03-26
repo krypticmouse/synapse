@@ -1,11 +1,11 @@
 use std::fs;
 use std::path::Path;
 
-use synapse_dsl::ast::{Item, ChannelDef};
+use synapse_dsl::ast::{ChannelDef, Item};
 use synapse_runtime::config::{GraphConfig, RuntimeConfig, VectorConfig};
 use synapse_runtime::llm::{EmbeddingClient, LlmClient};
 use synapse_runtime::storage::sqlite::SqliteBackend;
-use synapse_runtime::storage::{StorageBackend, VectorBackendKind, GraphBackendKind};
+use synapse_runtime::storage::{GraphBackendKind, StorageBackend, VectorBackendKind};
 use synapse_runtime::{docker, Runtime, StorageManager};
 
 async fn connect_vector_backend(
@@ -25,13 +25,15 @@ async fn connect_vector_backend(
                 }
                 "weaviate" => {
                     let url = docker::ensure_weaviate(data_dir, name).await?;
-                    let vb = synapse_runtime::storage::weaviate::WeaviateBackend::connect(&url).await?;
+                    let vb =
+                        synapse_runtime::storage::weaviate::WeaviateBackend::connect(&url).await?;
                     println!("  ✓ Weaviate [{name}] auto-started at {url}");
                     Ok(VectorBackendKind::Weaviate(vb))
                 }
                 "chromadb" | "chroma" => {
                     let url = docker::ensure_chromadb(data_dir, name).await?;
-                    let vb = synapse_runtime::storage::chromadb::ChromaDBBackend::connect(&url).await?;
+                    let vb =
+                        synapse_runtime::storage::chromadb::ChromaDBBackend::connect(&url).await?;
                     println!("  ✓ ChromaDB [{name}] auto-started at {url}");
                     Ok(VectorBackendKind::ChromaDB(vb))
                 }
@@ -81,19 +83,22 @@ async fn connect_graph_backend(
                 }
                 "memgraph" => {
                     let url = docker::ensure_memgraph(data_dir, name).await?;
-                    let gb = synapse_runtime::storage::memgraph::MemgraphBackend::connect(&url).await?;
+                    let gb =
+                        synapse_runtime::storage::memgraph::MemgraphBackend::connect(&url).await?;
                     println!("  ✓ Memgraph [{name}] auto-started at {url}");
                     Ok(GraphBackendKind::Memgraph(gb))
                 }
                 "arangodb" | "arango" => {
                     let url = docker::ensure_arangodb(data_dir, name).await?;
-                    let gb = synapse_runtime::storage::arangodb::ArangoDBBackend::connect(&url).await?;
+                    let gb =
+                        synapse_runtime::storage::arangodb::ArangoDBBackend::connect(&url).await?;
                     println!("  ✓ ArangoDB [{name}] auto-started at {url}");
                     Ok(GraphBackendKind::ArangoDB(gb))
                 }
                 "surrealdb" | "surreal" => {
                     let url = docker::ensure_surrealdb(data_dir, name).await?;
-                    let gb = synapse_runtime::storage::surrealdb::SurrealDBBackend::connect(&url).await?;
+                    let gb = synapse_runtime::storage::surrealdb::SurrealDBBackend::connect(&url)
+                        .await?;
                     println!("  ✓ SurrealDB [{name}] auto-started at {url}");
                     Ok(GraphBackendKind::SurrealDB(gb))
                 }
@@ -117,7 +122,8 @@ async fn connect_graph_backend(
                 Ok(GraphBackendKind::ArangoDB(gb))
             }
             "surrealdb" | "surreal" => {
-                let gb = synapse_runtime::storage::surrealdb::SurrealDBBackend::connect(url).await?;
+                let gb =
+                    synapse_runtime::storage::surrealdb::SurrealDBBackend::connect(url).await?;
                 println!("  ✓ SurrealDB [{name}] connected at {url}");
                 Ok(GraphBackendKind::SurrealDB(gb))
             }
@@ -159,7 +165,9 @@ pub async fn run(file: &str, port: Option<u16>, daemon: bool) -> anyhow::Result<
     // Connect vector backends
     for (name, vcfg) in &config.vectors {
         match connect_vector_backend(name, vcfg, data_dir).await {
-            Ok(vb) => { storage.vectors.insert(name.clone(), vb); }
+            Ok(vb) => {
+                storage.vectors.insert(name.clone(), vb);
+            }
             Err(e) => {
                 tracing::error!(error = %e, backend = %name, "failed to connect vector backend");
                 eprintln!("  ✗ Vector backend [{name}] failed: {e}");
@@ -170,7 +178,9 @@ pub async fn run(file: &str, port: Option<u16>, daemon: bool) -> anyhow::Result<
     // Connect graph backends
     for (name, gcfg) in &config.graphs {
         match connect_graph_backend(name, gcfg, data_dir).await {
-            Ok(gb) => { storage.graphs.insert(name.clone(), gb); }
+            Ok(gb) => {
+                storage.graphs.insert(name.clone(), gb);
+            }
             Err(e) => {
                 tracing::error!(error = %e, backend = %name, "failed to connect graph backend");
                 eprintln!("  ✗ Graph backend [{name}] failed: {e}");

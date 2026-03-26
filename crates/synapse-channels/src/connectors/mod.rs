@@ -65,92 +65,231 @@ macro_rules! define_connector {
 // ═══════════════════════════════════════════════════════════════
 
 define_connector!(
-    telegram, TelegramConnector, "Telegram", "telegram",
-    ["message", "edit", "delete", "reaction", "file_upload", "member_join", "member_leave"]
+    telegram,
+    TelegramConnector,
+    "Telegram",
+    "telegram",
+    [
+        "message",
+        "edit",
+        "delete",
+        "reaction",
+        "file_upload",
+        "member_join",
+        "member_leave"
+    ]
 );
 
 define_connector!(
-    discord, DiscordConnector, "Discord", "discord",
-    ["message", "edit", "delete", "reaction", "thread_reply", "file_upload", "member_join", "member_leave"]
+    discord,
+    DiscordConnector,
+    "Discord",
+    "discord",
+    [
+        "message",
+        "edit",
+        "delete",
+        "reaction",
+        "thread_reply",
+        "file_upload",
+        "member_join",
+        "member_leave"
+    ]
 );
 
 define_connector!(
-    slack, SlackConnector, "Slack", "slack",
-    ["message", "edit", "delete", "reaction", "thread_reply", "file_upload", "member_join", "member_leave"]
+    slack,
+    SlackConnector,
+    "Slack",
+    "slack",
+    [
+        "message",
+        "edit",
+        "delete",
+        "reaction",
+        "thread_reply",
+        "file_upload",
+        "member_join",
+        "member_leave"
+    ]
 );
 
 define_connector!(
-    whatsapp, WhatsAppConnector, "WhatsApp", "whatsapp",
+    whatsapp,
+    WhatsAppConnector,
+    "WhatsApp",
+    "whatsapp",
     ["message", "edit", "delete", "reaction", "file_upload"]
 );
 
 define_connector!(
-    signal, SignalConnector, "Signal", "signal",
+    signal,
+    SignalConnector,
+    "Signal",
+    "signal",
     ["message", "edit", "delete", "reaction", "file_upload"]
 );
 
 define_connector!(
-    matrix, MatrixConnector, "Matrix", "matrix",
-    ["message", "edit", "delete", "reaction", "thread_reply", "file_upload", "member_join", "member_leave"]
+    matrix,
+    MatrixConnector,
+    "Matrix",
+    "matrix",
+    [
+        "message",
+        "edit",
+        "delete",
+        "reaction",
+        "thread_reply",
+        "file_upload",
+        "member_join",
+        "member_leave"
+    ]
 );
 
 define_connector!(
-    email, EmailConnector, "Email", "email",
+    email,
+    EmailConnector,
+    "Email",
+    "email",
     ["message", "file_upload"]
 );
 
 define_connector!(
-    teams, TeamsConnector, "Microsoft Teams", "teams",
-    ["message", "edit", "delete", "reaction", "thread_reply", "file_upload", "member_join", "member_leave"]
+    teams,
+    TeamsConnector,
+    "Microsoft Teams",
+    "teams",
+    [
+        "message",
+        "edit",
+        "delete",
+        "reaction",
+        "thread_reply",
+        "file_upload",
+        "member_join",
+        "member_leave"
+    ]
 );
 
 define_connector!(
-    mattermost, MattermostConnector, "Mattermost", "mattermost",
-    ["message", "edit", "delete", "reaction", "thread_reply", "file_upload", "member_join", "member_leave"]
+    mattermost,
+    MattermostConnector,
+    "Mattermost",
+    "mattermost",
+    [
+        "message",
+        "edit",
+        "delete",
+        "reaction",
+        "thread_reply",
+        "file_upload",
+        "member_join",
+        "member_leave"
+    ]
 );
 
 define_connector!(
-    google_chat, GoogleChatConnector, "Google Chat", "google_chat",
-    ["message", "edit", "delete", "reaction", "thread_reply", "member_join", "member_leave"]
+    google_chat,
+    GoogleChatConnector,
+    "Google Chat",
+    "google_chat",
+    [
+        "message",
+        "edit",
+        "delete",
+        "reaction",
+        "thread_reply",
+        "member_join",
+        "member_leave"
+    ]
 );
 
 define_connector!(
-    webex, WebexConnector, "Webex", "webex",
-    ["message", "edit", "delete", "file_upload", "member_join", "member_leave"]
+    webex,
+    WebexConnector,
+    "Webex",
+    "webex",
+    [
+        "message",
+        "edit",
+        "delete",
+        "file_upload",
+        "member_join",
+        "member_leave"
+    ]
 );
 
 define_connector!(
-    feishu, FeishuConnector, "Feishu/Lark", "feishu",
-    ["message", "edit", "delete", "reaction", "file_upload", "member_join", "member_leave"]
+    feishu,
+    FeishuConnector,
+    "Feishu/Lark",
+    "feishu",
+    [
+        "message",
+        "edit",
+        "delete",
+        "reaction",
+        "file_upload",
+        "member_join",
+        "member_leave"
+    ]
 );
 
 define_connector!(
-    rocketchat, RocketChatConnector, "Rocket.Chat", "rocketchat",
-    ["message", "edit", "delete", "reaction", "thread_reply", "file_upload", "member_join", "member_leave"]
+    rocketchat,
+    RocketChatConnector,
+    "Rocket.Chat",
+    "rocketchat",
+    [
+        "message",
+        "edit",
+        "delete",
+        "reaction",
+        "thread_reply",
+        "file_upload",
+        "member_join",
+        "member_leave"
+    ]
 );
 
 define_connector!(
-    zulip, ZulipConnector, "Zulip", "zulip",
+    zulip,
+    ZulipConnector,
+    "Zulip",
+    "zulip",
     ["message", "edit", "delete", "reaction", "thread_reply"]
 );
 
 define_connector!(
-    xmpp, XmppConnector, "XMPP", "xmpp",
+    xmpp,
+    XmppConnector,
+    "XMPP",
+    "xmpp",
     ["message", "member_join", "member_leave"]
 );
 
 define_connector!(
-    line, LineConnector, "LINE", "line",
+    line,
+    LineConnector,
+    "LINE",
+    "line",
     ["message", "file_upload", "member_join", "member_leave"]
 );
 
 define_connector!(
-    viber, ViberConnector, "Viber", "viber",
+    viber,
+    ViberConnector,
+    "Viber",
+    "viber",
     ["message", "file_upload"]
 );
 
 define_connector!(
-    messenger, MessengerConnector, "Facebook Messenger", "messenger",
+    messenger,
+    MessengerConnector,
+    "Facebook Messenger",
+    "messenger",
     ["message", "reaction", "file_upload"]
 );
 
@@ -159,27 +298,42 @@ define_connector!(
 // ═══════════════════════════════════════════════════════════════
 
 define_connector!(
-    mastodon, MastodonConnector, "Mastodon", "mastodon",
+    mastodon,
+    MastodonConnector,
+    "Mastodon",
+    "mastodon",
     ["message", "edit", "delete", "reaction"]
 );
 
 define_connector!(
-    bluesky, BlueskyConnector, "Bluesky", "bluesky",
+    bluesky,
+    BlueskyConnector,
+    "Bluesky",
+    "bluesky",
     ["message", "delete", "reaction"]
 );
 
 define_connector!(
-    reddit, RedditConnector, "Reddit", "reddit",
+    reddit,
+    RedditConnector,
+    "Reddit",
+    "reddit",
     ["message", "edit", "delete", "reaction", "thread_reply"]
 );
 
 define_connector!(
-    linkedin, LinkedInConnector, "LinkedIn", "linkedin",
+    linkedin,
+    LinkedInConnector,
+    "LinkedIn",
+    "linkedin",
     ["message", "reaction", "thread_reply"]
 );
 
 define_connector!(
-    twitch, TwitchConnector, "Twitch", "twitch",
+    twitch,
+    TwitchConnector,
+    "Twitch",
+    "twitch",
     ["message", "delete", "member_join", "member_leave"]
 );
 
@@ -188,37 +342,73 @@ define_connector!(
 // ═══════════════════════════════════════════════════════════════
 
 define_connector!(
-    irc, IrcConnector, "IRC", "irc",
+    irc,
+    IrcConnector,
+    "IRC",
+    "irc",
     ["message", "member_join", "member_leave"]
 );
 
 define_connector!(
-    guilded, GuildedConnector, "Guilded", "guilded",
-    ["message", "edit", "delete", "reaction", "thread_reply", "member_join", "member_leave"]
+    guilded,
+    GuildedConnector,
+    "Guilded",
+    "guilded",
+    [
+        "message",
+        "edit",
+        "delete",
+        "reaction",
+        "thread_reply",
+        "member_join",
+        "member_leave"
+    ]
 );
 
 define_connector!(
-    revolt, RevoltConnector, "Revolt", "revolt",
-    ["message", "edit", "delete", "reaction", "member_join", "member_leave"]
+    revolt,
+    RevoltConnector,
+    "Revolt",
+    "revolt",
+    [
+        "message",
+        "edit",
+        "delete",
+        "reaction",
+        "member_join",
+        "member_leave"
+    ]
 );
 
 define_connector!(
-    keybase, KeybaseConnector, "Keybase", "keybase",
+    keybase,
+    KeybaseConnector,
+    "Keybase",
+    "keybase",
     ["message", "edit", "delete", "reaction"]
 );
 
 define_connector!(
-    discourse, DiscourseConnector, "Discourse", "discourse",
+    discourse,
+    DiscourseConnector,
+    "Discourse",
+    "discourse",
     ["message", "edit", "delete", "reaction", "thread_reply"]
 );
 
 define_connector!(
-    gitter, GitterConnector, "Gitter", "gitter",
+    gitter,
+    GitterConnector,
+    "Gitter",
+    "gitter",
     ["message", "edit", "delete"]
 );
 
 define_connector!(
-    nextcloud_talk, NextcloudTalkConnector, "Nextcloud Talk", "nextcloud_talk",
+    nextcloud_talk,
+    NextcloudTalkConnector,
+    "Nextcloud Talk",
+    "nextcloud_talk",
     ["message", "edit", "delete", "reaction", "file_upload"]
 );
 
@@ -227,12 +417,18 @@ define_connector!(
 // ═══════════════════════════════════════════════════════════════
 
 define_connector!(
-    threema, ThreemaConnector, "Threema", "threema",
+    threema,
+    ThreemaConnector,
+    "Threema",
+    "threema",
     ["message", "file_upload"]
 );
 
 define_connector!(
-    nostr, NostrConnector, "Nostr", "nostr",
+    nostr,
+    NostrConnector,
+    "Nostr",
+    "nostr",
     ["message", "delete", "reaction"]
 );
 
@@ -241,7 +437,10 @@ define_connector!(
 // ═══════════════════════════════════════════════════════════════
 
 define_connector!(
-    mumble, MumbleConnector, "Mumble", "mumble",
+    mumble,
+    MumbleConnector,
+    "Mumble",
+    "mumble",
     ["message", "member_join", "member_leave"]
 );
 
@@ -250,22 +449,41 @@ define_connector!(
 // ═══════════════════════════════════════════════════════════════
 
 define_connector!(
-    pumble, PumbleConnector, "Pumble", "pumble",
-    ["message", "edit", "delete", "reaction", "thread_reply", "file_upload"]
+    pumble,
+    PumbleConnector,
+    "Pumble",
+    "pumble",
+    [
+        "message",
+        "edit",
+        "delete",
+        "reaction",
+        "thread_reply",
+        "file_upload"
+    ]
 );
 
 define_connector!(
-    flock, FlockConnector, "Flock", "flock",
+    flock,
+    FlockConnector,
+    "Flock",
+    "flock",
     ["message", "file_upload"]
 );
 
 define_connector!(
-    twist, TwistConnector, "Twist", "twist",
+    twist,
+    TwistConnector,
+    "Twist",
+    "twist",
     ["message", "edit", "delete", "reaction", "thread_reply"]
 );
 
 define_connector!(
-    dingtalk, DingTalkConnector, "DingTalk", "dingtalk",
+    dingtalk,
+    DingTalkConnector,
+    "DingTalk",
+    "dingtalk",
     ["message", "file_upload", "member_join", "member_leave"]
 );
 
@@ -273,17 +491,14 @@ define_connector!(
 // PUSH NOTIFICATIONS / WEBHOOKS
 // ═══════════════════════════════════════════════════════════════
 
-define_connector!(
-    ntfy, NtfyConnector, "ntfy", "ntfy",
-    ["message"]
-);
+define_connector!(ntfy, NtfyConnector, "ntfy", "ntfy", ["message"]);
+
+define_connector!(gotify, GotifyConnector, "Gotify", "gotify", ["message"]);
 
 define_connector!(
-    gotify, GotifyConnector, "Gotify", "gotify",
-    ["message"]
-);
-
-define_connector!(
-    webhook, WebhookConnector, "Webhook", "webhook",
+    webhook,
+    WebhookConnector,
+    "Webhook",
+    "webhook",
     ["message", "edit", "delete"]
 );

@@ -208,9 +208,7 @@ async fn eval_expr_inner(env: &mut ExecEnv, expr: &Expr) -> anyhow::Result<Value
             Ok(Value::Array(results))
         }
 
-        Expr::Alias { expr, .. } => {
-            eval_expr(env, expr).await
-        }
+        Expr::Alias { expr, .. } => eval_expr(env, expr).await,
     }
 }
 

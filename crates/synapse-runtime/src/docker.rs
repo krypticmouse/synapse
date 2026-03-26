@@ -219,15 +219,27 @@ pub async fn ensure_weaviate(data_dir: &Path, instance: &str) -> Result<String> 
 
     match inspect_container(&container) {
         ContainerState::Running => {}
-        ContainerState::Stopped => { start_container(&container)?; }
+        ContainerState::Stopped => {
+            start_container(&container)?;
+        }
         ContainerState::NotFound => {
             let status = Command::new("docker")
                 .args([
-                    "run", "-d", "--name", &container,
-                    "-p", &format!("{port}:8080"),
-                    "-e", "AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED=true",
-                    "-e", "PERSISTENCE_DATA_PATH=/var/lib/weaviate",
-                    "-v", &format!("{}:/var/lib/weaviate", storage_dir.canonicalize().unwrap_or(storage_dir).display()),
+                    "run",
+                    "-d",
+                    "--name",
+                    &container,
+                    "-p",
+                    &format!("{port}:8080"),
+                    "-e",
+                    "AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED=true",
+                    "-e",
+                    "PERSISTENCE_DATA_PATH=/var/lib/weaviate",
+                    "-v",
+                    &format!(
+                        "{}:/var/lib/weaviate",
+                        storage_dir.canonicalize().unwrap_or(storage_dir).display()
+                    ),
                     WEAVIATE_IMAGE,
                 ])
                 .stdout(std::process::Stdio::null())
@@ -252,13 +264,23 @@ pub async fn ensure_chromadb(data_dir: &Path, instance: &str) -> Result<String> 
 
     match inspect_container(&container) {
         ContainerState::Running => {}
-        ContainerState::Stopped => { start_container(&container)?; }
+        ContainerState::Stopped => {
+            start_container(&container)?;
+        }
         ContainerState::NotFound => {
             let status = Command::new("docker")
                 .args([
-                    "run", "-d", "--name", &container,
-                    "-p", &format!("{port}:8000"),
-                    "-v", &format!("{}:/chroma/chroma", storage_dir.canonicalize().unwrap_or(storage_dir).display()),
+                    "run",
+                    "-d",
+                    "--name",
+                    &container,
+                    "-p",
+                    &format!("{port}:8000"),
+                    "-v",
+                    &format!(
+                        "{}:/chroma/chroma",
+                        storage_dir.canonicalize().unwrap_or(storage_dir).display()
+                    ),
                     CHROMADB_IMAGE,
                 ])
                 .stdout(std::process::Stdio::null())
@@ -283,13 +305,23 @@ pub async fn ensure_memgraph(data_dir: &Path, instance: &str) -> Result<String> 
 
     match inspect_container(&container) {
         ContainerState::Running => {}
-        ContainerState::Stopped => { start_container(&container)?; }
+        ContainerState::Stopped => {
+            start_container(&container)?;
+        }
         ContainerState::NotFound => {
             let status = Command::new("docker")
                 .args([
-                    "run", "-d", "--name", &container,
-                    "-p", &format!("{port}:7687"),
-                    "-v", &format!("{}:/var/lib/memgraph", storage_dir.canonicalize().unwrap_or(storage_dir).display()),
+                    "run",
+                    "-d",
+                    "--name",
+                    &container,
+                    "-p",
+                    &format!("{port}:7687"),
+                    "-v",
+                    &format!(
+                        "{}:/var/lib/memgraph",
+                        storage_dir.canonicalize().unwrap_or(storage_dir).display()
+                    ),
                     MEMGRAPH_IMAGE,
                 ])
                 .stdout(std::process::Stdio::null())
@@ -314,14 +346,25 @@ pub async fn ensure_arangodb(data_dir: &Path, instance: &str) -> Result<String> 
 
     match inspect_container(&container) {
         ContainerState::Running => {}
-        ContainerState::Stopped => { start_container(&container)?; }
+        ContainerState::Stopped => {
+            start_container(&container)?;
+        }
         ContainerState::NotFound => {
             let status = Command::new("docker")
                 .args([
-                    "run", "-d", "--name", &container,
-                    "-p", &format!("{port}:8529"),
-                    "-e", "ARANGO_NO_AUTH=1",
-                    "-v", &format!("{}:/var/lib/arangodb3", storage_dir.canonicalize().unwrap_or(storage_dir).display()),
+                    "run",
+                    "-d",
+                    "--name",
+                    &container,
+                    "-p",
+                    &format!("{port}:8529"),
+                    "-e",
+                    "ARANGO_NO_AUTH=1",
+                    "-v",
+                    &format!(
+                        "{}:/var/lib/arangodb3",
+                        storage_dir.canonicalize().unwrap_or(storage_dir).display()
+                    ),
                     ARANGODB_IMAGE,
                 ])
                 .stdout(std::process::Stdio::null())
@@ -346,14 +389,28 @@ pub async fn ensure_surrealdb(data_dir: &Path, instance: &str) -> Result<String>
 
     match inspect_container(&container) {
         ContainerState::Running => {}
-        ContainerState::Stopped => { start_container(&container)?; }
+        ContainerState::Stopped => {
+            start_container(&container)?;
+        }
         ContainerState::NotFound => {
             let status = Command::new("docker")
                 .args([
-                    "run", "-d", "--name", &container,
-                    "-p", &format!("{port}:8000"),
-                    "-v", &format!("{}:/data", storage_dir.canonicalize().unwrap_or(storage_dir).display()),
-                    SURREALDB_IMAGE, "start", "--bind", "0.0.0.0:8000", "file:/data/synapse.db",
+                    "run",
+                    "-d",
+                    "--name",
+                    &container,
+                    "-p",
+                    &format!("{port}:8000"),
+                    "-v",
+                    &format!(
+                        "{}:/data",
+                        storage_dir.canonicalize().unwrap_or(storage_dir).display()
+                    ),
+                    SURREALDB_IMAGE,
+                    "start",
+                    "--bind",
+                    "0.0.0.0:8000",
+                    "file:/data/synapse.db",
                 ])
                 .stdout(std::process::Stdio::null())
                 .stderr(std::process::Stdio::piped())

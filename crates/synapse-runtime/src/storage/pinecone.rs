@@ -179,9 +179,7 @@ impl PineconeBackend {
                         if k.starts_with('_') {
                             continue;
                         }
-                        record
-                            .fields
-                            .insert(k.clone(), json_to_value(v));
+                        record.fields.insert(k.clone(), json_to_value(v));
                     }
                 }
                 return Ok(Some(record));

@@ -224,11 +224,7 @@ impl SurrealDBBackend {
         Ok(None)
     }
 
-    pub async fn query(
-        &self,
-        type_name: &str,
-        filter: &QueryFilter,
-    ) -> StorageResult<Vec<Record>> {
+    pub async fn query(&self, type_name: &str, filter: &QueryFilter) -> StorageResult<Vec<Record>> {
         let mut sql = format!("SELECT * FROM {type_name}");
 
         if !filter.conditions.is_empty() {
@@ -280,11 +276,7 @@ impl SurrealDBBackend {
                     if let Some(obj) = item.as_object() {
                         if let Some(id) = obj.get("id").and_then(|v| v.as_str()) {
                             // SurrealDB IDs are "table:id" format
-                            record.id = id
-                                .split(':')
-                                .nth(1)
-                                .unwrap_or(id)
-                                .to_string();
+                            record.id = id.split(':').nth(1).unwrap_or(id).to_string();
                         }
                         for (k, v) in obj {
                             if k == "id" {

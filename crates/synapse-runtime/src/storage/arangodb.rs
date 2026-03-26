@@ -244,10 +244,7 @@ impl ArangoDBBackend {
     pub async fn get(&self, type_name: &str, id: &str) -> StorageResult<Option<Record>> {
         let resp = self
             .client
-            .get(format!(
-                "{}/_api/document/{type_name}/{id}",
-                self.db_url()
-            ))
+            .get(format!("{}/_api/document/{type_name}/{id}", self.db_url()))
             .send()
             .await
             .map_err(|e| StorageError::Neo4j(format!("arangodb get failed: {e}")))?;
@@ -274,11 +271,7 @@ impl ArangoDBBackend {
         Ok(Some(record))
     }
 
-    pub async fn query(
-        &self,
-        type_name: &str,
-        filter: &QueryFilter,
-    ) -> StorageResult<Vec<Record>> {
+    pub async fn query(&self, type_name: &str, filter: &QueryFilter) -> StorageResult<Vec<Record>> {
         let mut aql = format!("FOR doc IN {type_name}");
 
         if !filter.conditions.is_empty() {
@@ -356,10 +349,7 @@ impl ArangoDBBackend {
     pub async fn delete(&self, type_name: &str, id: &str) -> StorageResult<()> {
         let _ = self
             .client
-            .delete(format!(
-                "{}/_api/document/{type_name}/{id}",
-                self.db_url()
-            ))
+            .delete(format!("{}/_api/document/{type_name}/{id}", self.db_url()))
             .send()
             .await;
         Ok(())
@@ -368,7 +358,10 @@ impl ArangoDBBackend {
     pub async fn clear(&self, type_name: &str) -> StorageResult<()> {
         let _ = self
             .client
-            .put(format!("{}/_api/collection/{type_name}/truncate", self.db_url()))
+            .put(format!(
+                "{}/_api/collection/{type_name}/truncate",
+                self.db_url()
+            ))
             .send()
             .await;
         Ok(())
@@ -381,7 +374,13 @@ impl ArangoDBBackend {
 
 fn sanitize_key(s: &str) -> String {
     s.chars()
-        .map(|c| if c.is_alphanumeric() || c == '_' || c == '-' { c } else { '_' })
+        .map(|c| {
+            if c.is_alphanumeric() || c == '_' || c == '-' {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect()
 }
 

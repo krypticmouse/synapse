@@ -363,7 +363,9 @@ fn collect_definitions(
                 channels.insert(ch.name.clone(), ch.clone());
             }
             Item::Namespace(ns) => {
-                collect_definitions(&ns.items, handlers, queries, updates, memories, extern_fns, channels);
+                collect_definitions(
+                    &ns.items, handlers, queries, updates, memories, extern_fns, channels,
+                );
             }
             _ => {}
         }

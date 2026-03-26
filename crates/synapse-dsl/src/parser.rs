@@ -802,20 +802,14 @@ fn build_program_parser<'a>() -> impl Parser<'a, &'a [Token], Program, extra::Er
 
     let channel_event_handler = just(Token::On)
         .ignore_then(any_name())
-        .then(
-            just(Token::Arrow)
-                .ignore_then(any_name())
-                .or_not(),
-        )
+        .then(just(Token::Arrow).ignore_then(any_name()).or_not())
         .then(params().delimited_by(just(Token::LParen), just(Token::RParen)))
         .then(stmts_block.clone())
-        .map(|(((event, target), params), body)| {
-            ChannelEventHandler {
-                event,
-                target,
-                params,
-                body,
-            }
+        .map(|(((event, target), params), body)| ChannelEventHandler {
+            event,
+            target,
+            params,
+            body,
         });
 
     let channel_member = choice((
@@ -870,7 +864,10 @@ fn build_program_parser<'a>() -> impl Parser<'a, &'a [Token], Program, extra::Er
         .boxed();
 
     // ─── Item (any top-level construct) ──────────────────────
-    let item = choice((config, channel, memory, handler, query, update, policy, extern_fn)).boxed();
+    let item = choice((
+        config, channel, memory, handler, query, update, policy, extern_fn,
+    ))
+    .boxed();
 
     // ─── Namespace or bare item ──────────────────────────────
     let ns_or_item = just(Token::Namespace)
@@ -1333,9 +1330,13 @@ mod tests {
                 ConfigValue::Dict(entries) => {
                     assert_eq!(entries.len(), 2);
                     assert_eq!(entries[0].0, "primary");
-                    assert!(matches!(&entries[0].1, ConfigValue::FnCall { name, arg } if name == "auto" && arg == "qdrant"));
+                    assert!(
+                        matches!(&entries[0].1, ConfigValue::FnCall { name, arg } if name == "auto" && arg == "qdrant")
+                    );
                     assert_eq!(entries[1].0, "fast");
-                    assert!(matches!(&entries[1].1, ConfigValue::FnCall { name, .. } if name == "chromadb"));
+                    assert!(
+                        matches!(&entries[1].1, ConfigValue::FnCall { name, .. } if name == "chromadb")
+                    );
                 }
                 other => panic!("expected Dict, got {:?}", other),
             }
@@ -1369,7 +1370,12 @@ mod tests {
             // The where clause should contain Alias nodes
             let wh = q.body.where_clause.as_ref().unwrap();
             // Top level is And between two aliases
-            if let Expr::Binary { op: BinOp::And, left, right } = wh {
+            if let Expr::Binary {
+                op: BinOp::And,
+                left,
+                right,
+            } = wh
+            {
                 assert!(matches!(left.as_ref(), Expr::Alias { alias, .. } if alias == "sm"));
                 assert!(matches!(right.as_ref(), Expr::Alias { alias, .. } if alias == "gm"));
             } else {
@@ -1387,7 +1393,11 @@ mod tests {
     #[test]
     fn parse_multi_backend_example() {
         let result = parse(include_str!("../../../examples/multi_backend.mnm"));
-        assert!(result.is_ok(), "failed to parse multi_backend: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "failed to parse multi_backend: {:?}",
+            result.err()
+        );
     }
 
     #[test]
@@ -1509,6 +1519,10 @@ mod tests {
     #[test]
     fn parse_channels_example() {
         let result = parse(include_str!("../../../examples/channels.mnm"));
-        assert!(result.is_ok(), "failed to parse channels.mnm: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "failed to parse channels.mnm: {:?}",
+            result.err()
+        );
     }
 }
