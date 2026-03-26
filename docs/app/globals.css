@@ -1,3 +1,303 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+
+/* ── Design Tokens ─────────────────────────────── */
+
+:root {
+  --syn-sans: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --syn-heading: 'Manrope', var(--syn-sans);
+  --syn-mono: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  --syn-radius: 10px;
+  --syn-radius-lg: 14px;
+  --syn-transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ── Base ───────────────────────────────────────── */
+
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--syn-sans);
+  font-feature-settings: 'cv01', 'cv11', 'ss01';
+}
+
+::selection {
+  background: hsl(250 60% 68% / 0.25);
+}
+
+/* ── Headings ──────────────────────────────────── */
+
+h1, h2, h3, h4, h5, h6,
+.nextra-toc-meta-title {
+  font-family: var(--syn-heading);
+  letter-spacing: -0.025em;
+  font-weight: 700;
+}
+
+article h1 {
+  font-size: 2.5rem !important;
+  font-weight: 800 !important;
+  letter-spacing: -0.035em;
+  line-height: 1.15 !important;
+  padding-bottom: 0.25rem;
+}
+
+article h2 {
+  font-size: 1.65rem !important;
+  font-weight: 700 !important;
+  margin-top: 2.75rem !important;
+  padding-bottom: 0.6rem;
+  border-bottom: 1px solid rgba(128, 128, 128, 0.12);
+}
+
+article h3 {
+  font-size: 1.3rem !important;
+  font-weight: 700 !important;
+  margin-top: 2rem !important;
+}
+
+article h4 {
+  font-size: 1.1rem !important;
+  font-weight: 600 !important;
+}
+
+/* ── Body Content ──────────────────────────────── */
+
+article p {
+  line-height: 1.8;
+  letter-spacing: 0.005em;
+}
+
+article li {
+  line-height: 1.75;
+}
+
+article > :first-child + p,
+article > p:first-of-type {
+  font-size: 1.1rem;
+  color: var(--nextra-content-color, inherit);
+  opacity: 0.85;
+}
+
+article strong {
+  font-weight: 600;
+}
+
+/* ── Links ─────────────────────────────────────── */
+
+article a:not(.nextra-card) {
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+  transition: color var(--syn-transition), text-decoration-color var(--syn-transition);
+}
+
+article a:not(.nextra-card):hover {
+  text-decoration-thickness: 2px;
+}
+
+/* ── Code ──────────────────────────────────────── */
+
+code,
+pre,
+pre code,
+pre span,
+[data-rehype-pretty-code-fragment] code,
+[data-rehype-pretty-code-fragment] pre {
+  font-family: var(--syn-mono) !important;
+  font-feature-settings: 'liga' 1, 'calt' 1;
+}
+
+:not(pre) > code {
+  padding: 0.2em 0.4em !important;
+  border-radius: 6px !important;
+  font-size: 0.855em !important;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+pre {
+  border-radius: var(--syn-radius) !important;
+  padding: 1rem 1.25rem !important;
+  font-size: 0.875rem !important;
+  line-height: 1.7 !important;
+  border: 1px solid rgba(128, 128, 128, 0.12) !important;
+}
+
+html[class~="dark"] pre {
+  background: hsl(235 16% 9.5%) !important;
+  border-color: rgba(255, 255, 255, 0.06) !important;
+}
+
+html:not([class~="dark"]) pre {
+  background: hsl(230 25% 97.5%) !important;
+  border-color: rgba(0, 0, 0, 0.06) !important;
+}
+
+/* Copy button refinement */
+pre button {
+  border-radius: 6px !important;
+  opacity: 0 !important;
+  transition: opacity var(--syn-transition) !important;
+}
+
+pre:hover button {
+  opacity: 0.7 !important;
+}
+
+pre button:hover {
+  opacity: 1 !important;
+}
+
+/* ── Cards ─────────────────────────────────────── */
+
+.nextra-card {
+  border-radius: var(--syn-radius-lg) !important;
+  padding: 1.35rem 1.4rem !important;
+  transition: all var(--syn-transition) !important;
+  border: 1px solid rgba(128, 128, 128, 0.12) !important;
+}
+
 .nextra-card > span:last-child {
   margin-top: auto;
+}
+
+.nextra-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 28px -10px rgba(0, 0, 0, 0.08);
+}
+
+html[class~="dark"] .nextra-card:hover {
+  box-shadow: 0 12px 28px -10px rgba(0, 0, 0, 0.35);
+  border-color: hsl(250 50% 55% / 0.25) !important;
+}
+
+html:not([class~="dark"]) .nextra-card:hover {
+  border-color: hsl(250 50% 55% / 0.2) !important;
+}
+
+.nextra-card h3,
+.nextra-card span:first-child {
+  font-family: var(--syn-heading);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* ── Navbar ────────────────────────────────────── */
+
+.nextra-nav-container nav {
+  backdrop-filter: blur(16px) saturate(180%);
+}
+
+html:not([class~="dark"]) .nextra-nav-container nav {
+  background: rgba(255, 255, 255, 0.85) !important;
+}
+
+html[class~="dark"] .nextra-nav-container nav {
+  background: rgba(17, 17, 20, 0.8) !important;
+}
+
+.nextra-nav-container {
+  border-bottom: 1px solid rgba(128, 128, 128, 0.08);
+}
+
+/* ── Sidebar ───────────────────────────────────── */
+
+.nextra-sidebar-container {
+  font-family: var(--syn-sans);
+}
+
+.nextra-sidebar-container a,
+.nextra-sidebar-container button {
+  border-radius: 8px !important;
+  font-size: 0.875rem;
+  transition: all var(--syn-transition);
+}
+
+/* ── Table of Contents ─────────────────────────── */
+
+.nextra-toc a {
+  font-size: 0.8125rem;
+  transition: color var(--syn-transition);
+}
+
+/* ── Footer ────────────────────────────────────── */
+
+footer {
+  font-size: 0.8125rem !important;
+  letter-spacing: 0.01em;
+  opacity: 0.65;
+}
+
+/* ── Callouts ──────────────────────────────────── */
+
+.nextra-callout {
+  border-radius: var(--syn-radius) !important;
+}
+
+/* ── Tables ────────────────────────────────────── */
+
+article table {
+  border-radius: var(--syn-radius) !important;
+  overflow: hidden;
+  font-size: 0.9rem;
+}
+
+article th {
+  font-family: var(--syn-heading);
+  font-weight: 600;
+  font-size: 0.8125rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+/* ── Blockquotes ───────────────────────────────── */
+
+article blockquote {
+  font-style: italic;
+  border-left-width: 3px;
+  opacity: 0.9;
+}
+
+/* ── Scrollbar ─────────────────────────────────── */
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(128, 128, 128, 0.25);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(128, 128, 128, 0.4);
+}
+
+/* ── Smooth transitions on interactive elements ── */
+
+a, button, input, .nextra-card {
+  transition: all var(--syn-transition);
+}
+
+/* ── Breadcrumb ────────────────────────────────── */
+
+.nextra-breadcrumb {
+  font-size: 0.8125rem;
+  opacity: 0.7;
+}
+
+/* ── Search ────────────────────────────────────── */
+
+.nextra-search input {
+  border-radius: 10px !important;
+  font-family: var(--syn-sans);
 }

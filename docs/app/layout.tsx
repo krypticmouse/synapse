@@ -23,12 +23,14 @@ export default async function RootLayout({
   const navbar = (
     <Navbar
       logo={
-        <img
-          src="/synapse_logo.png"
-          alt="Synapse"
-          height={36}
-          style={{ height: 36 }}
-        />
+        <span style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <img
+            src="/synapse_logo.png"
+            alt="Synapse"
+            height={30}
+            style={{ height: 30 }}
+          />
+        </span>
       }
       projectLink="https://github.com/krypticmouse/synapse"
     />
@@ -38,11 +40,13 @@ export default async function RootLayout({
     <html lang="en" dir="ltr" suppressHydrationWarning>
       <Head
         color={{
-          hue: { dark: 270, light: 270 },
-          saturation: { dark: 80, light: 80 }
+          hue: { dark: 250, light: 250 },
+          saturation: { dark: 65, light: 50 }
         }}
       >
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
       </Head>
       <body>
         <Layout
@@ -55,8 +59,8 @@ export default async function RootLayout({
           toc={{ backToTop: true }}
           footer={
             <Footer>
-              MIT {new Date().getFullYear()} © Synapse. Configuration Language
-              for Memory Systems.
+              <span style={{ fontFamily: "'Manrope', sans-serif", fontWeight: 600 }}>Synapse</span>
+              {' '}&mdash; Configuration Language for Memory Systems. MIT {new Date().getFullYear()}.
             </Footer>
           }
         >
