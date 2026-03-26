@@ -15,3 +15,8 @@ export const SITE_DESCRIPTION =
 
 /** Path under /public; crawlers resolve via metadataBase */
 export const OG_IMAGE_PATH = '/synapse_logo.png'
+
+/** `owner/repo` for GitHub links and API */
+export const GITHUB_REPO = 'krypticmouse/synapse'
+
+export const GITHUB_REPO_URL = `https://github.com/${GITHUB_REPO}`
