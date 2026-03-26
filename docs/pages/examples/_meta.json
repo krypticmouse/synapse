@@ -1,0 +1,11 @@
+{
+  "hello": "Hello World",
+  "agent-facts": "Agent Facts",
+  "conversation": "Conversation Memory",
+  "user-profile": "User Profile",
+  "letta": "Letta (Tiered Memory)",
+  "zep": "Zep (Temporal Knowledge Graph)",
+  "supermemory": "SuperMemory (Universal Layer)",
+  "multi-backend": "Multi-Backend",
+  "channels": "Channel Ingestion"
+}

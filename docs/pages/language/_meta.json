@@ -1,0 +1,13 @@
+{
+  "overview": "Overview",
+  "config": "Config Block",
+  "memory": "Memory",
+  "handlers": "Event Handlers",
+  "queries": "Queries",
+  "updates": "Update Rules",
+  "channels": "Channels",
+  "policies": "Policies",
+  "types": "Type System",
+  "expressions": "Expressions & Statements",
+  "extern-functions": "Extern Functions"
+}

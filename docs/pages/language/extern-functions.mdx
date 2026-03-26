@@ -1,0 +1,80 @@
+# Extern Functions
+
+Extern functions declare function signatures whose implementations are simulated by the LLM at runtime. This lets agents call arbitrary "tools" without writing integration code.
+
+## Syntax
+
+```mnm
+@extern
+fn function_name(param1: type1, param2: type2): ReturnType
+```
+
+## How It Works
+
+When a handler or update rule calls an extern function, the runtime:
+
+1. Builds a prompt describing the function signature, parameter names, and types
+2. Includes the actual argument values
+3. Sends the prompt to the configured extractor LLM
+4. Parses the JSON response into the declared return type
+
+This means extern functions are **LLM-simulated**. The quality of results depends on the model and how descriptive your function names and parameter names are.
+
+## Examples
+
+### Memory Editing Tools
+
+```mnm
+@extern
+fn core_memory_replace(label: string, old_content: string, new_content: string): bool
+
+@extern
+fn core_memory_append(label: string, content: string): bool
+```
+
+### Search Tools
+
+```mnm
+@extern
+fn archival_memory_search(query: string, limit: int): ArchivalEntry[]
+```
+
+### Data Processing
+
+```mnm
+@extern
+fn sync_connector(connector_type: string, user_id: string): DocumentChunk[]
+
+@extern
+fn process_document(content: string, doc_type: string): DocumentChunk[]
+```
+
+## Using Extern Functions
+
+Call them like regular functions in handlers:
+
+```mnm
+on archive_request(content: string, source: string) {
+  let result = archival_memory_insert(content)
+  if result {
+    store(ArchivalEntry {
+      content: content,
+      source: source,
+      created_at: now()
+    })
+  }
+}
+```
+
+## Best Practices
+
+import { Callout } from 'nextra/components'
+
+<Callout type="warning">
+  Extern functions rely on LLM inference, which means they are non-deterministic and may produce incorrect results. Use them for best-effort operations, not for critical logic.
+</Callout>
+
+- Use descriptive function names that clearly convey intent
+- Use descriptive parameter names (not `x`, `y`, `z`)
+- Prefer simple return types (string, bool, arrays of records)
+- Requires `extractor` to be configured in the `config` block

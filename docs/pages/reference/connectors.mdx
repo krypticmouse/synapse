@@ -1,0 +1,118 @@
+# Channel Connectors
+
+Synapse supports 40 channel connectors for ingesting data from external platforms. Each connector polls a source for new events and routes them through your ingest and update pipelines.
+
+## Using Connectors
+
+Connectors are configured inside `channel` blocks in your `.mnm` file:
+
+```mnm
+channel my_feed {
+  source: connector_name
+  config {
+    token: env("API_TOKEN")
+  }
+  poll_interval: 5m
+
+  on message -> ingest(content: string) {
+    content |> extract() |> store()
+  }
+}
+```
+
+## Connector Reference
+
+### Chat and Messaging
+
+| Source | Name | Events | Description |
+|--------|------|--------|-------------|
+| `telegram` | Telegram | message, edit, delete, reaction, file_upload, member_join, member_leave | Telegram Bot API |
+| `discord` | Discord | message, edit, delete, reaction, thread_reply, file_upload, member_join, member_leave | Discord Bot |
+| `slack` | Slack | message, edit, delete, reaction, thread_reply, file_upload, member_join, member_leave | Slack App |
+| `whatsapp` | WhatsApp | message, edit, delete, reaction, file_upload | WhatsApp Business API |
+| `signal` | Signal | message, edit, delete, reaction, file_upload | Signal Messenger |
+| `matrix` | Matrix | message, edit, delete, reaction, thread_reply, file_upload, member_join, member_leave | Matrix protocol |
+| `email` | Email | message, file_upload | Email via IMAP/SMTP |
+| `teams` | Microsoft Teams | message, edit, delete, reaction, thread_reply, file_upload, member_join, member_leave | MS Teams |
+| `mattermost` | Mattermost | message, edit, delete, reaction, thread_reply, file_upload, member_join, member_leave | Mattermost |
+| `google_chat` | Google Chat | message, edit, delete, reaction, thread_reply, member_join, member_leave | Google Chat |
+| `webex` | Webex | message, edit, delete, file_upload, member_join, member_leave | Cisco Webex |
+| `feishu` | Feishu/Lark | message, edit, delete, reaction, file_upload, member_join, member_leave | Feishu/Lark |
+| `rocketchat` | Rocket.Chat | message, edit, delete, reaction, thread_reply, file_upload, member_join, member_leave | Rocket.Chat |
+| `zulip` | Zulip | message, edit, delete, reaction, thread_reply | Zulip |
+| `xmpp` | XMPP | message, member_join, member_leave | XMPP/Jabber |
+| `line` | LINE | message, file_upload, member_join, member_leave | LINE Messaging API |
+| `viber` | Viber | message, file_upload | Viber Bot API |
+| `messenger` | Facebook Messenger | message, reaction, file_upload | Facebook Messenger |
+
+### Social Platforms
+
+| Source | Name | Events | Description |
+|--------|------|--------|-------------|
+| `mastodon` | Mastodon | message, edit, delete, reaction | Mastodon/ActivityPub |
+| `bluesky` | Bluesky | message, delete, reaction | Bluesky/AT Protocol |
+| `reddit` | Reddit | message, edit, delete, reaction, thread_reply | Reddit API |
+| `linkedin` | LinkedIn | message, reaction, thread_reply | LinkedIn API |
+| `twitch` | Twitch | message, delete, member_join, member_leave | Twitch IRC/API |
+
+### Developer and Community
+
+| Source | Name | Events | Description |
+|--------|------|--------|-------------|
+| `irc` | IRC | message, member_join, member_leave | IRC protocol |
+| `guilded` | Guilded | message, edit, delete, reaction, thread_reply, member_join, member_leave | Guilded |
+| `revolt` | Revolt | message, edit, delete, reaction, member_join, member_leave | Revolt |
+| `keybase` | Keybase | message, edit, delete, reaction | Keybase |
+| `discourse` | Discourse | message, edit, delete, reaction, thread_reply | Discourse |
+| `gitter` | Gitter | message, edit, delete | Gitter |
+| `nextcloud_talk` | Nextcloud Talk | message, edit, delete, reaction, file_upload | Nextcloud Talk |
+
+### Secure and Encrypted
+
+| Source | Name | Events | Description |
+|--------|------|--------|-------------|
+| `threema` | Threema | message, file_upload | Threema Gateway |
+| `nostr` | Nostr | message, delete, reaction | Nostr protocol |
+
+### Enterprise
+
+| Source | Name | Events | Description |
+|--------|------|--------|-------------|
+| `pumble` | Pumble | message, edit, delete, reaction, thread_reply, file_upload | Pumble |
+| `flock` | Flock | message, file_upload | Flock |
+| `twist` | Twist | message, edit, delete, reaction, thread_reply | Twist |
+| `dingtalk` | DingTalk | message, file_upload, member_join, member_leave | DingTalk |
+| `mumble` | Mumble | message, member_join, member_leave | Mumble |
+
+### Push Notifications and Webhooks
+
+| Source | Name | Events | Description |
+|--------|------|--------|-------------|
+| `ntfy` | ntfy | message | ntfy push notifications |
+| `gotify` | Gotify | message | Gotify push messages |
+| `webhook` | Webhook | message, edit, delete | Generic HTTP webhook |
+
+## Event Types
+
+| Event | Description |
+|-------|-------------|
+| `message` | New message received |
+| `edit` | Existing message was edited |
+| `delete` | Message was deleted |
+| `reaction` | Reaction added to a message |
+| `thread_reply` | Reply in a thread |
+| `file_upload` | File was uploaded |
+| `member_join` | User joined |
+| `member_leave` | User left |
+
+## Source Aliases
+
+Some connectors accept multiple names:
+
+| Primary | Aliases |
+|---------|---------|
+| `teams` | `microsoft_teams` |
+| `feishu` | `lark` |
+| `rocketchat` | `rocket_chat` |
+| `messenger` | `facebook_messenger` |
+| `nextcloud_talk` | `nextcloud` |

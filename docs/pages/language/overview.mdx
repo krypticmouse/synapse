@@ -1,0 +1,154 @@
+# Language Overview
+
+Synapse programs are written in `.mnm` files. A program is a collection of top-level declarations that define the shape, behavior, and lifecycle of your memory system.
+
+## Program Structure
+
+Every `.mnm` file consists of these building blocks:
+
+```mnm
+# Optional: global configuration
+config { ... }
+
+# Optional: group declarations under a namespace
+namespace my_agent {
+
+  # Define memory schemas
+  memory Fact { ... }
+
+  # Define event handlers
+  on ingest(content: string) { ... }
+
+  # Define named queries
+  query Search(input: string): Fact[] { ... }
+
+  # Define update lifecycle rules
+  update Fact { ... }
+
+  # Define channel connectors
+  channel slack_feed { ... }
+
+  # Define standalone policies
+  policy Cleanup { ... }
+
+  # Declare external functions
+  @extern fn search(query: string): Fact[]
+}
+```
+
+All declarations except `config` can appear at the top level or inside a `namespace`. The namespace is purely organizational and does not affect runtime behavior.
+
+## Execution Model
+
+When you run `synapse apply file.mnm`, the following happens:
+
+1. **Parse** the `.mnm` file into an abstract syntax tree
+2. **Type-check** all declarations (schemas, handler params, query bodies)
+3. **Initialize storage** backends from the `config` block (SQLite tables, Qdrant collections, Neo4j indexes)
+4. **Register** all handlers, queries, update rules, and channels
+5. **Start** the HTTP server and channel polling loops
+6. **Wait** for events via the HTTP API or incoming channel data
+
+Data enters the system through **event handlers** (triggered by `synapse emit` or the HTTP API) or through **channels** (polling external platforms like Slack or Discord). Data is processed through **pipe chains**, stored via `store()`, and retrieved via **queries**.
+
+## Comments
+
+Line comments start with `#`:
+
+```mnm
+# This is a comment
+memory Note {
+  content: string  # inline comment
+}
+```
+
+## Namespaces
+
+Namespaces group related declarations. They are optional and can be nested:
+
+```mnm
+namespace team_knowledge {
+  memory Fact { ... }
+  on learn(content: string) { ... }
+  query Search(input: string): Fact[] { ... }
+}
+```
+
+Multiple namespaces can coexist in a single file. All declarations are flattened into a single runtime regardless of namespace nesting.
+
+## The Pipe Operator
+
+Synapse makes heavy use of the pipe operator `|>` for building data processing chains:
+
+```mnm
+on ingest(content: string) {
+  content
+    |> extract()          # LLM extracts structured facts
+    |> filter(f => f.confidence > 0.7)  # keep high-confidence facts
+    |> store()            # persist to all backends
+}
+```
+
+The pipe passes the left-hand value as the first argument to the right-hand function. This makes data flows read top-to-bottom instead of inside-out.
+
+## A Complete Example
+
+Here is a minimal but complete Synapse program that demonstrates the core concepts:
+
+```mnm
+config {
+  storage: sqlite("./data/knowledge.db")
+  vector: auto("qdrant")
+  embedding: openai("text-embedding-3-small")
+  extractor: openai("gpt-4o-mini")
+}
+
+namespace knowledge {
+  memory Fact {
+    content: string
+    subject: string
+    predicate: string
+    object: string
+    confidence: float[0,1]
+    created_at: timestamp
+
+    @index subject
+  }
+
+  on learn(content: string) {
+    content
+      |> extract()
+      |> store()
+  }
+
+  query Search(input: string): Fact[] {
+    from Fact
+    where semantic_match(input, threshold: 0.6)
+    order by confidence desc
+    limit 10
+  }
+
+  update Fact {
+    on_conflict(old, new) {
+      if new.confidence > old.confidence {
+        supersede(old, new)
+      } else {
+        discard(new)
+      }
+    }
+
+    every 24h {
+      confidence = confidence * 0.95
+      if confidence < 0.1 { delete() }
+    }
+  }
+}
+```
+
+This gives you:
+- A `Fact` memory type stored across SQLite, Qdrant, and (if configured) Neo4j
+- A `learn` handler that uses an LLM to extract structured facts from free text
+- A `Search` query that does semantic similarity search
+- Update rules that resolve contradictions and decay stale facts
+
+Each of these constructs is covered in detail in the following sections.

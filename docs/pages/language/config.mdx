@@ -1,0 +1,156 @@
+# Config Block
+
+The `config` block configures storage backends, LLM providers, and embedding models. It appears at the top level of a `.mnm` file.
+
+```mnm
+config {
+  storage: sqlite("./data/myapp.db")
+  vector: auto("qdrant")
+  graph: auto("neo4j")
+  embedding: openai("text-embedding-3-small")
+  extractor: openai("gpt-4o-mini")
+}
+```
+
+## Storage Backends
+
+### Relational Storage
+
+The primary record store. Every memory type gets a table here.
+
+| Syntax | Description |
+|--------|-------------|
+| `storage: sqlite("./path/to/db")` | SQLite database at the given path |
+| `storage: none` | No relational storage |
+
+### Vector Backends
+
+Vector databases for semantic search via `semantic_match()`.
+
+**Single backend:**
+
+```mnm
+config {
+  vector: auto("qdrant")       # auto-spawn via Docker
+  vector: qdrant("localhost:6333")  # connect to existing
+  vector: auto                  # auto-spawn default (Qdrant)
+  vector: embedded              # in-process (same as auto)
+  vector: none                  # disabled
+}
+```
+
+**Multiple named backends:**
+
+```mnm
+config {
+  vector: {
+    primary: auto("qdrant"),
+    fast: auto("chromadb")
+  }
+}
+```
+
+Named backends can be targeted in queries using the `backend` parameter:
+
+```mnm
+query Search(input: string): Fact[] {
+  from Fact
+  where semantic_match(input, backend: "primary", threshold: 0.5)
+  limit 10
+}
+```
+
+**Supported vector backends:**
+
+| Name | Syntax |
+|------|--------|
+| Qdrant | `qdrant("url")` or `auto("qdrant")` |
+| ChromaDB | `chromadb("url")` or `auto("chromadb")` |
+| Pinecone | `pinecone("url")` |
+| Weaviate | `weaviate("url")` or `auto("weaviate")` |
+
+### Graph Backends
+
+Graph databases for knowledge graph queries via `graph_match()` and `cypher()`.
+
+**Single backend:**
+
+```mnm
+config {
+  graph: auto("neo4j")
+  graph: neo4j("bolt://localhost:7687")
+  graph: none
+}
+```
+
+**Multiple named backends:**
+
+```mnm
+config {
+  graph: {
+    kg: auto("neo4j"),
+    social: auto("memgraph")
+  }
+}
+```
+
+**Supported graph backends:**
+
+| Name | Syntax |
+|------|--------|
+| Neo4j | `neo4j("url")` or `auto("neo4j")` |
+| Memgraph | `memgraph("url")` or `auto("memgraph")` |
+| ArangoDB | `arangodb("url")` or `auto("arangodb")` |
+| SurrealDB | `surrealdb("url")` or `auto("surrealdb")` |
+
+## LLM Configuration
+
+### Extractor
+
+The LLM model used by `extract()` and `summarize()` built-in functions:
+
+```mnm
+config {
+  extractor: openai("gpt-4o-mini")
+}
+```
+
+### Embedding
+
+The embedding model used for vector search and `semantic_match()`:
+
+```mnm
+config {
+  embedding: openai("text-embedding-3-small")
+}
+```
+
+Both require the `OPENAI_API_KEY` environment variable to be set.
+
+## Auto-Spawn
+
+When you use `auto` or `auto("backend_name")`, Synapse automatically spawns a Docker container for the backend:
+
+- **Qdrant**: Image `qdrant/qdrant`, ports 6333/6334, data in `.synapse/qdrant_storage`
+- **Neo4j**: Image `neo4j:latest`, ports 7687/7474, auth disabled, data in `.synapse/neo4j_data`
+- **ChromaDB**: Image `chromadb/chroma`, port 8000
+- **Memgraph**: Image `memgraph/memgraph`, port 7688
+- **ArangoDB**: Image `arangodb/arangodb`, port 8529
+- **SurrealDB**: Image `surrealdb/surrealdb`, port 8000
+- **Weaviate**: Image `semitechnologies/weaviate`, port 8080
+
+If the container already exists but is stopped, Synapse restarts it. The runtime waits for the service to be reachable before proceeding.
+
+import { Callout } from 'nextra/components'
+
+<Callout type="info">
+  Auto-spawn requires Docker to be installed and running. If Docker is not available, Synapse will report an error.
+</Callout>
+
+## Runtime Options
+
+The host and port default to `localhost:8080`. Override the port via the CLI:
+
+```bash
+synapse apply myapp.mnm --port 9090
+```

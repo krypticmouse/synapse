@@ -1,0 +1,93 @@
+# Type System
+
+Synapse has a static type system that validates your `.mnm` files at compile time. Types are checked for memory field definitions, handler parameters, query signatures, and expressions.
+
+## Primitive Types
+
+| Type | Description | Literal examples |
+|------|-------------|-----------------|
+| `string` | UTF-8 text | `"hello"`, `'world'` |
+| `int` | 64-bit integer | `42`, `-7`, `0` |
+| `float` | 64-bit floating point | `3.14`, `0.95` |
+| `bool` | Boolean | `true`, `false` |
+| `timestamp` | UTC date-time | Produced by `now()` |
+
+## Bounded Float
+
+Constrain a float to a range. The compiler validates that `min <= max`:
+
+```mnm
+confidence: float[0,1]       # 0.0 to 1.0
+sentiment: float[-1.0,1.0]   # negative to positive
+```
+
+Bounded floats are stored as regular floats. Use `@invariant` to enforce the bounds at runtime.
+
+## Optional Types
+
+Suffix any type with `?` to make it optional. Optional fields default to `null`:
+
+```mnm
+memory Fact {
+  content: string
+  source: string?         # may be null
+  valid_until: timestamp? # may be null
+}
+```
+
+Test for null in expressions:
+
+```mnm
+where valid_until == null
+where source != null
+```
+
+## Array Types
+
+Suffix any type with `[]` for an array:
+
+```mnm
+memory Episode {
+  messages: string[]
+  tags: string[]
+}
+```
+
+Arrays are JSON-serialized when stored in SQLite.
+
+## Named Types
+
+Reference other memory types by name:
+
+```mnm
+memory Session {
+  messages: Message[]
+}
+```
+
+Named types resolve to the memory definition with that name.
+
+## Type Modifiers Can Be Chained
+
+```mnm
+tags: string[]?    # optional array of strings
+scores: float[]    # array of floats
+```
+
+## Type Checking
+
+The `synapse check` command validates all types without starting the runtime:
+
+```bash
+synapse check myapp.mnm
+```
+
+The type checker verifies:
+- All memory fields have valid types
+- Handler and query parameters are well-typed
+- `@index` references exist as field names
+- `@invariant` expressions are valid
+- Default values match their field types
+- Struct constructions reference valid memory types and fields
+- Update rules reference existing memory types
+- Bounded float constraints have `min <= max`

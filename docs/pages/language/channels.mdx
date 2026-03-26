@@ -1,0 +1,271 @@
+# Channels
+
+Channels let you ingest data from external platforms like Slack, Discord, Telegram, and 37 more. Each channel connects to a source, polls for events, and routes them through your ingest and update pipelines.
+
+## Why Channels?
+
+Without channels, data enters Synapse only through `synapse emit` or the HTTP API. Channels automate this: they continuously poll external platforms and feed new messages, edits, and deletions into your memory system.
+
+Since incoming data may be new (requiring ingestion) or updated (requiring conflict resolution), channels naturally bridge both the `ingest` and `update` flows.
+
+## Basic Syntax
+
+```mnm
+channel channel_name {
+  source: connector_type
+  config {
+    key: value
+    key: env("ENV_VAR")
+  }
+  poll_interval: duration
+
+  on event_type -> target(params) {
+    # handler body
+  }
+}
+```
+
+## A Complete Example
+
+```mnm
+channel slack_feed {
+  source: slack
+  config {
+    token: env("SLACK_TOKEN")
+  }
+  poll_interval: 5m
+
+  on message -> ingest(content: string, author: string) {
+    content
+      |> extract()
+      |> store()
+  }
+
+  on edit -> update(content: string, message_id: string) {
+    content
+      |> extract()
+      |> store()
+  }
+
+  on delete(message_id: string) {
+    let msg = from Message
+      where message_id == message_id
+      limit 1
+  }
+}
+```
+
+## Channel Components
+
+### source
+
+The connector type. This determines which platform the channel connects to:
+
+```mnm
+channel my_feed {
+  source: discord
+}
+```
+
+### config
+
+Key-value pairs for the connector. Use `env("VAR_NAME")` to read from environment variables (secrets should never be hardcoded):
+
+```mnm
+config {
+  token: env("SLACK_TOKEN")
+  channels: env("SLACK_CHANNELS")
+}
+```
+
+### poll_interval
+
+How often the channel checks for new data. Uses duration syntax:
+
+```mnm
+poll_interval: 30s    # every 30 seconds
+poll_interval: 1m     # every minute
+poll_interval: 5m     # every 5 minutes
+poll_interval: 1h     # every hour
+```
+
+If omitted, defaults to 5 minutes.
+
+### Event Handlers
+
+Each `on` block inside a channel handles a specific event type. The optional `-> target` arrow routes the event to an existing handler:
+
+```mnm
+# Route to the "ingest" handler
+on message -> ingest(content: string) {
+  content |> extract() |> store()
+}
+
+# Route to the "update" pipeline (triggers on_conflict rules)
+on edit -> update(content: string) {
+  content |> extract() |> store()
+}
+
+# No target: runs the body directly
+on delete(message_id: string) {
+  # custom logic
+}
+```
+
+**Targets:**
+- `-> ingest`: Routes through the `on ingest` handler, triggering the standard ingestion pipeline
+- `-> update`: Routes through ingestion, which triggers `on_conflict` rules if matching records exist
+- `-> custom_event`: Routes to any named handler
+- *(no target)*: Executes the event body directly
+
+## Event Types
+
+Each connector supports a subset of these events:
+
+| Event | Description |
+|-------|-------------|
+| `message` | New message received |
+| `edit` | Existing message was edited |
+| `delete` | Message was deleted |
+| `reaction` | Reaction added to a message |
+| `thread_reply` | Reply in a thread |
+| `file_upload` | File was uploaded |
+| `member_join` | User joined a channel/room |
+| `member_leave` | User left a channel/room |
+
+## Supported Connectors
+
+Synapse supports 40 connectors across messaging, social, developer, and push notification platforms.
+
+### Chat and Messaging
+
+| Source | Description |
+|--------|-------------|
+| `slack` | Slack App: messages, threads, reactions, file uploads |
+| `discord` | Discord Bot: messages, reactions, threads |
+| `telegram` | Telegram Bot API: messages, edits, commands |
+| `whatsapp` | WhatsApp Business API: messages, media |
+| `signal` | Signal Messenger: messages, attachments |
+| `matrix` | Matrix protocol: messages, rooms, federation |
+| `email` | Email (IMAP/SMTP): incoming messages, attachments |
+| `teams` | Microsoft Teams: messages, channels, meetings |
+| `mattermost` | Mattermost: messages, channels, webhooks |
+| `google_chat` | Google Chat: messages, spaces, cards |
+| `webex` | Cisco Webex: messages, rooms, meetings |
+| `feishu` | Feishu/Lark: messages, documents, approvals |
+| `rocketchat` | Rocket.Chat: messages, channels, integrations |
+| `zulip` | Zulip: messages, topics, streams |
+| `xmpp` | XMPP/Jabber: messages, presence, MUC |
+| `line` | LINE Messaging API: messages, stickers, rich menus |
+| `viber` | Viber Bot API: messages, rich media |
+| `messenger` | Facebook Messenger: messages, quick replies |
+
+### Social Platforms
+
+| Source | Description |
+|--------|-------------|
+| `mastodon` | Mastodon/ActivityPub: toots, boosts, mentions |
+| `bluesky` | Bluesky/AT Protocol: posts, reposts, mentions |
+| `reddit` | Reddit API: posts, comments, subreddits |
+| `linkedin` | LinkedIn API: posts, comments, messages |
+| `twitch` | Twitch IRC/API: chat messages, subscriptions |
+
+### Developer and Community
+
+| Source | Description |
+|--------|-------------|
+| `irc` | IRC protocol: messages, joins, parts |
+| `guilded` | Guilded: messages, channels, reactions |
+| `revolt` | Revolt: messages, channels, servers |
+| `keybase` | Keybase: encrypted messages, teams |
+| `discourse` | Discourse: topics, posts, categories |
+| `gitter` | Gitter: messages, rooms |
+| `nextcloud_talk` | Nextcloud Talk: messages, calls, rooms |
+
+### Secure and Encrypted
+
+| Source | Description |
+|--------|-------------|
+| `threema` | Threema Gateway: encrypted messages |
+| `nostr` | Nostr protocol: notes, events, relays |
+
+### Enterprise
+
+| Source | Description |
+|--------|-------------|
+| `pumble` | Pumble: messages, channels, threads |
+| `flock` | Flock: messages, channels, to-dos |
+| `twist` | Twist: threads, channels, conversations |
+| `dingtalk` | DingTalk: messages, groups, robots |
+| `mumble` | Mumble: voice/text messages |
+
+### Push Notifications and Webhooks
+
+| Source | Description |
+|--------|-------------|
+| `ntfy` | ntfy: push notifications, topics |
+| `gotify` | Gotify: push messages, applications |
+| `webhook` | Generic Webhook: HTTP POST events, custom payloads |
+
+## Multi-Channel Example
+
+```mnm
+namespace team_memory {
+  memory Message {
+    content: string
+    author: string
+    source: string
+    confidence: float[0,1]
+    created_at: timestamp
+
+    @index source
+    @index author
+  }
+
+  channel slack_feed {
+    source: slack
+    config { token: env("SLACK_TOKEN") }
+    poll_interval: 5m
+
+    on message -> ingest(content: string) {
+      content |> extract() |> store()
+    }
+  }
+
+  channel discord_feed {
+    source: discord
+    config { token: env("DISCORD_TOKEN") }
+    poll_interval: 5m
+
+    on message -> ingest(content: string) {
+      content |> extract() |> store()
+    }
+  }
+
+  channel telegram_feed {
+    source: telegram
+    config { token: env("TELEGRAM_BOT_TOKEN") }
+    poll_interval: 1m
+
+    on message -> ingest(content: string) {
+      content |> extract() |> store()
+    }
+  }
+
+  on ingest(content: string) {
+    content |> extract() |> store()
+  }
+
+  update Message {
+    on_conflict(old, new) {
+      if new.confidence > old.confidence {
+        supersede(old, new)
+      } else {
+        discard(new)
+      }
+    }
+  }
+}
+```
+
+All three channels feed into the same `ingest` handler, and the `update` rules handle conflicts uniformly regardless of source.

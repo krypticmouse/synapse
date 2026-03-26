@@ -1,0 +1,147 @@
+# Tutorial: Knowledge Graph with Zep
+
+In this tutorial, you will build a temporal knowledge graph memory system inspired by [Zep](https://www.getzep.com/). It combines episodic memory, semantic facts with temporal validity, and entity summaries using all three backends: SQLite, Qdrant, and Neo4j.
+
+## What You Will Learn
+
+- Triple-based fact storage (subject/predicate/object)
+- Temporal validity (`valid_from`, `valid_until`)
+- Hybrid queries combining semantic search and graph traversal
+- Score aliases for custom ranking
+- Entity summarization with periodic updates
+
+## Architecture
+
+```
+                    ┌─────────────────┐
+  Conversations ──▶ │ Episode         │ (episodic memory)
+                    └─────────────────┘
+                           │
+                     extract()
+                           │
+                    ┌──────▼──────────┐
+                    │ Fact            │ (semantic memory)
+                    │ subject/pred/obj│──────▶ Neo4j (graph)
+                    │ + embedding     │──────▶ Qdrant (vector)
+                    │ + fields        │──────▶ SQLite (relational)
+                    └─────────────────┘
+                           │
+                      summarize()
+                           │
+                    ┌──────▼──────────┐
+                    │ Entity          │ (entity summaries)
+                    └─────────────────┘
+```
+
+## The Config
+
+```mnm
+config {
+  storage: sqlite("./data/zep.db")
+  vector: auto
+  graph: auto
+  embedding: openai("text-embedding-3-small")
+  extractor: openai("gpt-4o-mini")
+}
+```
+
+`auto` for both vector and graph means Synapse auto-spawns Qdrant and Neo4j via Docker.
+
+## Memory Types
+
+### Facts with Temporal Validity
+
+```mnm
+memory Fact {
+  content: string
+  subject: string
+  predicate: string
+  object: string
+  confidence: float[0,1]
+  valid_from: timestamp
+  valid_until: timestamp?
+  superseded_by: string?
+
+  @index subject
+  @index predicate
+  @invariant valid_from <= valid_until or valid_until == null
+}
+```
+
+Key design decisions:
+- `valid_until: timestamp?` is null for current facts, set when superseded
+- `superseded_by: string?` links to the replacing fact's ID
+- The `@invariant` ensures temporal consistency
+- `@index` on subject and predicate speeds up graph-style lookups
+
+### Hybrid Query with Score Aliases
+
+This is the most powerful query pattern in Synapse:
+
+```mnm
+query GetContext(input: string): Fact[] {
+  from Fact
+  where semantic_match(input, threshold: 0.6) as sm
+    and graph_match(input, hops: 2) as gm
+    and valid_until == null
+  order by (sm * 0.7 + gm * 0.3) desc
+  limit 10
+}
+```
+
+What happens here:
+
+1. `semantic_match` queries Qdrant, returning IDs with similarity scores aliased as `sm`
+2. `graph_match` queries Neo4j, returning IDs of entities within 2 hops, aliased as `gm`
+3. `valid_until == null` filters to only current (non-superseded) facts
+4. Results are ranked by a weighted formula: 70% semantic + 30% graph
+5. Top 10 are returned
+
+### Temporal Conflict Resolution
+
+```mnm
+update Fact {
+  on_conflict(old, new) {
+    if new.valid_from > old.valid_from {
+      old.valid_until = new.valid_from
+      old.superseded_by = new.id
+      store(new)
+    } else {
+      discard(new)
+    }
+  }
+}
+```
+
+When a new fact conflicts with an existing one (same subject+predicate), the newer fact wins. The old fact is not deleted but marked with an end date, preserving the full temporal history.
+
+## Try It Out
+
+```bash
+synapse apply zep.mnm
+
+# End a conversation (extracts facts automatically)
+synapse emit conversation_end '{
+  "session_id": "s1",
+  "messages": [
+    {"role": "user", "content": "Where does Alice work?"},
+    {"role": "assistant", "content": "Alice works at Acme Corp as a senior engineer."},
+    {"role": "user", "content": "Who is her manager?"},
+    {"role": "assistant", "content": "Bob is her manager at Acme Corp."}
+  ]
+}'
+
+# Hybrid search
+synapse query GetContext '{"input": "Who manages Alice?"}'
+
+# Entity timeline
+synapse query EntityHistory '{"entity_name": "Alice"}'
+
+# Graph traversal
+synapse query RelatedEntities '{"entity": "Alice"}'
+
+# Inspect all backends
+synapse inspect
+```
+
+The `inspect` command shows the data across all three backends, letting you see the SQLite rows, Qdrant vectors, and Neo4j graph nodes simultaneously.

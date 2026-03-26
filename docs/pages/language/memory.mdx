@@ -1,0 +1,135 @@
+# Memory
+
+A `memory` block defines a schema for stored records. Each memory type maps to a table in the relational backend, a collection in the vector backend, and nodes in the graph backend.
+
+## Defining a Memory
+
+```mnm
+memory Fact {
+  content: string
+  subject: string
+  predicate: string
+  object: string
+  confidence: float[0,1]
+  valid_from: timestamp
+  valid_until: timestamp?
+  superseded_by: string?
+}
+```
+
+Each field has a name and a type. Fields can be optional (suffixed with `?`) and can have default values.
+
+## Field Types
+
+| Type | Syntax | Example |
+|------|--------|---------|
+| String | `string` | `name: string` |
+| Integer | `int` | `count: int` |
+| Float | `float` | `score: float` |
+| Bounded float | `float[min,max]` | `confidence: float[0,1]` |
+| Boolean | `bool` | `active: bool` |
+| Timestamp | `timestamp` | `created_at: timestamp` |
+| Optional | `T?` | `deleted_at: timestamp?` |
+| Array | `T[]` | `tags: string[]` |
+| Named type | `TypeName` | `author: User` |
+
+Bounded floats enforce compile-time validation that `min <= max`. At runtime, `@invariant` constraints can enforce value bounds.
+
+## Default Values
+
+Fields can have default values:
+
+```mnm
+memory Note {
+  content: string
+  tags: string[] = []
+  priority: int = 0
+  archived: bool = false
+}
+```
+
+## Decorators
+
+Decorators modify field or memory behavior. They can be placed inline on a field or standalone inside the memory block.
+
+### @index
+
+Creates a database index on the field, speeding up `WHERE` filters. Also used as the conflict key for `on_conflict` rules.
+
+```mnm
+memory Fact {
+  subject: string
+  predicate: string
+  object: string
+
+  @index subject
+  @index predicate
+}
+```
+
+This generates `CREATE INDEX IF NOT EXISTS` statements on the corresponding SQLite columns.
+
+### @invariant
+
+Declares a constraint that is checked before every `store()` call. If the expression evaluates to false, the store is rejected with an error.
+
+```mnm
+memory CoreBlock {
+  label: string
+  content: string
+  char_limit: int
+
+  @invariant content.length <= char_limit
+}
+```
+
+Invariant expressions can reference any field of the record.
+
+### @extern
+
+Marks a field as externally managed:
+
+```mnm
+memory Entry {
+  content: string
+  @extern source: string
+}
+```
+
+## Automatic Fields
+
+Every record automatically gets these virtual fields:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `_id` | `string` | UUID v4, generated on creation |
+| `_type` | `string` | The memory type name (e.g., `"Fact"`) |
+
+These fields are available in handlers, queries, and update rules but are not declared in the schema.
+
+## How Storage Works
+
+When you call `store(record)`, the record is written to **all** configured backends:
+
+1. **SQLite**: Inserts a row with all fields as columns
+2. **Vector backends**: Embeds the `content` field and stores the vector with the record ID
+3. **Graph backends**: Creates a node, and if the record has `subject`/`predicate`/`object` fields, creates a triple `(subject)-[predicate]->(object)` linked to the record via `HAS_FACT` edges
+
+This means a single `store()` call populates your relational store, vector index, and knowledge graph simultaneously.
+
+## Constructing Records
+
+Records are constructed using struct-init syntax:
+
+```mnm
+store(Fact {
+  content: "Alice works at Acme Corp",
+  subject: "Alice",
+  predicate: "works_at",
+  object: "Acme Corp",
+  confidence: 0.95,
+  valid_from: now()
+})
+```
+
+All non-optional fields without defaults must be provided. Optional fields default to `null`.

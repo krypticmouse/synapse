@@ -1,0 +1,128 @@
+# SuperMemory (Universal Layer)
+
+A universal memory layer inspired by [SuperMemory](https://supermemory.com/) with user profiles, atomic facts, document chunks, connector sync, and both semantic and graph search.
+
+**Requires:** Docker (for Qdrant and Neo4j)
+
+```mnm
+config {
+  storage: sqlite("./supermemory.db")
+  vector: auto
+  graph: auto
+  embedding: openai("text-embedding-3-small")
+  extractor: openai("gpt-4o")
+}
+
+namespace supermemory {
+  memory MemoryFact {
+    content: string
+    subject: string
+    predicate: string
+    object: string
+    user_id: string
+    container: string
+    source_type: string
+    source_id: string?
+    confidence: float[0,1]
+    document_date: timestamp?
+    created_at: timestamp
+    accessed_at: timestamp
+    @index user_id
+    @index container
+    @index source_type
+    @index subject
+  }
+
+  memory UserProfile {
+    user_id: string
+    preferences: string[]
+    expertise: string[]
+    recent_topics: string[]
+    summary: string
+    last_updated: timestamp
+    @index user_id
+  }
+
+  memory DocumentChunk {
+    content: string
+    document_id: string
+    document_type: string
+    chunk_index: int
+    metadata: string
+    @index document_id
+  }
+
+  @extern fn sync_connector(connector_type: string, user_id: string): DocumentChunk[]
+  @extern fn process_document(content: string, doc_type: string): DocumentChunk[]
+
+  on message(user_id: string, content: string, container: string) {
+    content
+      |> extract()
+      |> map(f => MemoryFact {
+        content: f.content,
+        subject: f.subject,
+        predicate: f.predicate,
+        object: f.object,
+        user_id: user_id,
+        container: container,
+        source_type: "conversation",
+        confidence: f.confidence,
+        created_at: now(),
+        accessed_at: now()
+      })
+      |> store()
+  }
+
+  query Search(query: string, user_id: string): MemoryFact[] {
+    from MemoryFact, DocumentChunk
+    where semantic_match(query, threshold: 0.6)
+      and user_id == user_id
+    limit 15
+  }
+
+  query GraphSearch(query: string, user_id: string): MemoryFact[] {
+    from MemoryFact
+    where graph_match(query, hops: 2) and user_id == user_id
+    order by confidence desc
+    limit 15
+  }
+
+  query DeepSearch(query: string, user_id: string): MemoryFact[] {
+    from MemoryFact
+    where semantic_match(query, threshold: 0.5)
+      and graph_match(query, hops: 3)
+      and user_id == user_id
+    order by confidence desc
+    limit 10
+  }
+
+  update MemoryFact {
+    on_access { accessed_at = now() }
+
+    on_conflict(old, new) {
+      if new.document_date > old.document_date {
+        supersede(old, new)
+      } else if new.confidence > old.confidence + 0.2 {
+        supersede(old, new)
+      } else {
+        discard(new)
+      }
+    }
+
+    every 24h {
+      if confidence < 0.3 and accessed_at < now() - 30d {
+        delete()
+      }
+    }
+  }
+}
+```
+
+## What It Demonstrates
+
+- User-scoped memory with `container` isolation
+- Document chunking via extern functions
+- Cross-type queries (MemoryFact + DocumentChunk)
+- Three search strategies: semantic, graph, and deep (hybrid)
+- Document-date-aware conflict resolution
+- Pipe chains with `map` for transforming extracted facts

@@ -1,0 +1,214 @@
+# Tutorial: Building a Fact Memory
+
+In this tutorial, you will build a fact memory system with confidence scoring, conflict resolution, and automatic decay. This is the core pattern used in most AI agent memory systems.
+
+## What You Will Learn
+
+- Bounded float types for confidence scores
+- LLM-powered fact extraction with `extract()`
+- Conflict resolution with `on_conflict`
+- Periodic decay with `every`
+- Multiple query strategies
+
+## Step 1: Define the Schema
+
+```mnm
+config {
+  storage: sqlite("./data/facts.db")
+  vector: auto("qdrant")
+  embedding: openai("text-embedding-3-small")
+  extractor: openai("gpt-4o-mini")
+}
+
+memory Fact {
+  content: string
+  source: string
+  confidence: float[0.0,1.0]
+  created_at: timestamp
+  accessed_at: timestamp
+}
+```
+
+The `confidence` field uses a bounded float `float[0.0,1.0]` to document the valid range. We configure Qdrant for vector search and OpenAI for LLM extraction.
+
+## Step 2: Add Event Handlers
+
+Two ways to learn facts: explicit storage and LLM extraction.
+
+```mnm
+# Explicit fact with source-dependent confidence
+on learn(content: string, source: string) {
+  let conf = 0.8
+  if source == "stated" {
+    conf = 1.0
+  }
+
+  store(Fact {
+    content: content,
+    source: source,
+    confidence: conf,
+    created_at: now(),
+    accessed_at: now()
+  })
+}
+
+# LLM-powered extraction from free text
+on ingest(content: string) {
+  content
+    |> extract()
+    |> store()
+}
+```
+
+The `learn` handler takes explicit content with a source tag. Content from direct user statements gets full confidence (1.0), while inferred content gets 0.8.
+
+The `ingest` handler sends raw text to the LLM, which extracts structured facts with subject/predicate/object triples.
+
+## Step 3: Add Queries
+
+```mnm
+query GetFacts(limit_n: int): Fact[] {
+  from Fact
+  order by confidence desc
+  limit limit_n
+}
+
+query BySource(source: string): Fact[] {
+  from Fact
+  where source == source
+  order by created_at desc
+}
+
+query Search(input: string): Fact[] {
+  from Fact
+  where semantic_match(input, threshold: 0.6)
+  order by _score desc
+  limit 10
+}
+```
+
+`GetFacts` returns facts ordered by confidence. `BySource` filters by origin. `Search` does semantic similarity search using the vector backend.
+
+## Step 4: Add Update Rules
+
+This is where the memory becomes intelligent:
+
+```mnm
+update Fact {
+  on_access {
+    accessed_at = now()
+  }
+
+  on_conflict(old, new) {
+    if new.confidence > old.confidence {
+      supersede(old, new)
+    } else {
+      discard(new)
+    }
+  }
+
+  every 24h {
+    confidence = confidence * 0.95
+    if confidence < 0.1 {
+      delete()
+    }
+  }
+}
+```
+
+Three rules working together:
+
+1. **on_access**: Track when facts are read, keeping frequently-accessed facts visible
+2. **on_conflict**: When a new fact contradicts an existing one (same subject+predicate), the higher-confidence fact wins
+3. **every 24h**: Reduce all confidence scores by 5% daily. Facts below 0.1 are deleted. This means unused, low-confidence facts naturally fade away
+
+## Step 5: Try It Out
+
+```bash
+synapse apply facts.mnm
+
+# Learn some facts
+synapse emit learn '{"content": "User prefers dark mode", "source": "stated"}'
+synapse emit learn '{"content": "User is a Python developer", "source": "inferred"}'
+
+# Ingest free text (LLM extracts facts)
+synapse emit ingest '{"content": "Alice mentioned she works at Acme Corp as a senior engineer and uses Rust daily"}'
+
+# Query
+synapse query GetFacts '{"limit_n": 10}'
+synapse query Search '{"input": "programming languages"}'
+synapse query BySource '{"source": "stated"}'
+```
+
+## The Complete File
+
+```mnm
+config {
+  storage: sqlite("./data/facts.db")
+  vector: auto("qdrant")
+  embedding: openai("text-embedding-3-small")
+  extractor: openai("gpt-4o-mini")
+}
+
+memory Fact {
+  content: string
+  source: string
+  confidence: float[0.0,1.0]
+  created_at: timestamp
+  accessed_at: timestamp
+}
+
+on learn(content: string, source: string) {
+  let conf = 0.8
+  if source == "stated" { conf = 1.0 }
+  store(Fact {
+    content: content,
+    source: source,
+    confidence: conf,
+    created_at: now(),
+    accessed_at: now()
+  })
+}
+
+on ingest(content: string) {
+  content |> extract() |> store()
+}
+
+query GetFacts(limit_n: int): Fact[] {
+  from Fact
+  order by confidence desc
+  limit limit_n
+}
+
+query BySource(source: string): Fact[] {
+  from Fact
+  where source == source
+  order by created_at desc
+}
+
+query Search(input: string): Fact[] {
+  from Fact
+  where semantic_match(input, threshold: 0.6)
+  order by _score desc
+  limit 10
+}
+
+update Fact {
+  on_access {
+    accessed_at = now()
+  }
+
+  on_conflict(old, new) {
+    if new.confidence > old.confidence {
+      supersede(old, new)
+    } else {
+      discard(new)
+    }
+  }
+
+  every 24h {
+    confidence = confidence * 0.95
+    if confidence < 0.1 { delete() }
+  }
+}
+```

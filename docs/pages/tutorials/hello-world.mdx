@@ -1,0 +1,159 @@
+# Tutorial: Hello World
+
+In this tutorial, you will build the simplest possible Synapse memory system: a note-taking app that stores and retrieves text notes.
+
+## What You Will Learn
+
+- How to define a `config` block
+- How to define a `memory` schema
+- How to write an event handler
+- How to write a query
+- How to interact with a running system via the CLI
+
+## Step 1: Create the File
+
+Create a file called `hello.mnm`:
+
+```mnm
+config {
+  storage: sqlite("./data/hello.db")
+}
+```
+
+This tells Synapse to use SQLite as the storage backend, with the database file at `./data/hello.db`.
+
+## Step 2: Define a Memory Type
+
+Add a `Note` memory with two fields:
+
+```mnm
+config {
+  storage: sqlite("./data/hello.db")
+}
+
+memory Note {
+  content: string
+  created_at: timestamp
+}
+```
+
+This creates a `Note` table in SQLite with `content` (text) and `created_at` (datetime) columns, plus an auto-generated `_id` (UUID).
+
+## Step 3: Add a Handler
+
+Define what happens when a `save` event is received:
+
+```mnm
+config {
+  storage: sqlite("./data/hello.db")
+}
+
+memory Note {
+  content: string
+  created_at: timestamp
+}
+
+on save(content: string) {
+  store(Note {
+    content: content,
+    created_at: now()
+  })
+}
+```
+
+The `on save` handler takes a `content` parameter, constructs a `Note` record with the current timestamp, and stores it.
+
+## Step 4: Add a Query
+
+Add a way to retrieve all notes:
+
+```mnm
+config {
+  storage: sqlite("./data/hello.db")
+}
+
+memory Note {
+  content: string
+  created_at: timestamp
+}
+
+on save(content: string) {
+  store(Note {
+    content: content,
+    created_at: now()
+  })
+}
+
+query GetAll(): Note[] {
+  from Note
+  order by created_at desc
+}
+```
+
+## Step 5: Run It
+
+```bash
+synapse apply hello.mnm
+```
+
+Output:
+
+```
+Applying hello.mnm...
+  ✓ Compiled successfully
+  ✓ Connected to sqlite (./data/hello.db)
+  ✓ Runtime listening on localhost:8080
+```
+
+## Step 6: Store Some Notes
+
+In a separate terminal:
+
+```bash
+synapse emit save '{"content": "Remember to buy milk"}'
+synapse emit save '{"content": "Meeting at 3pm tomorrow"}'
+synapse emit save '{"content": "Read the Rust book chapter 10"}'
+```
+
+## Step 7: Query Your Notes
+
+```bash
+synapse query GetAll
+```
+
+Returns all three notes, newest first.
+
+## The Complete File
+
+```mnm
+# hello.mnm — The simplest Synapse memory system
+
+config {
+  storage: sqlite("./data/hello.db")
+}
+
+memory Note {
+  content: string
+  created_at: timestamp
+}
+
+on save(content: string) {
+  store(Note {
+    content: content,
+    created_at: now()
+  })
+}
+
+query GetAll(): Note[] {
+  from Note
+  order by created_at desc
+}
+```
+
+## Next Steps
+
+This is the foundation. From here you can:
+
+- Add [semantic search](/tutorials/fact-memory) with vector backends
+- Add [update rules](/language/updates) for conflict resolution and decay
+- Add [channels](/tutorials/channel-ingestion) to ingest from Slack, Discord, etc.

@@ -1,0 +1,156 @@
+# Tutorial: Multi-Backend Systems
+
+In this tutorial, you will configure multiple named vector and graph backends, and write queries that target specific backends for different performance and accuracy tradeoffs.
+
+## What You Will Learn
+
+- Named vector backend configuration
+- Named graph backend configuration
+- Targeting specific backends in queries
+- Score aliases with multi-backend ranking
+
+## Why Multiple Backends?
+
+Different backends have different strengths:
+
+- **Qdrant** excels at high-accuracy semantic search but may be slower for bulk operations
+- **ChromaDB** is lightweight and fast for approximate search
+- **Neo4j** is powerful for deep graph traversals
+- **Memgraph** is optimized for real-time graph queries
+
+By naming your backends, you can route different queries to the best backend for the job.
+
+## Configuration
+
+```mnm
+config {
+  storage: sqlite("./data/multi.db")
+  vector: {
+    primary: auto("qdrant"),
+    fast: auto("chromadb")
+  }
+  graph: {
+    kg: auto("neo4j"),
+    social: auto("memgraph")
+  }
+  embedding: openai("text-embedding-3-small")
+  extractor: openai("gpt-4o-mini")
+}
+```
+
+This configures:
+- Two vector backends: `primary` (Qdrant) and `fast` (ChromaDB)
+- Two graph backends: `kg` (Neo4j) and `social` (Memgraph)
+
+When you call `store()`, records are written to **all** backends. Queries then target specific backends.
+
+## Targeted Queries
+
+### High-Accuracy Search
+
+```mnm
+query Search(input: string): Knowledge[] {
+  from Knowledge
+  where semantic_match(input, backend: "primary", threshold: 0.5) as sm
+    and graph_match(input, backend: "kg", hops: 2) as gm
+  order by sm * 0.6 + gm * 0.4 desc
+  limit 20
+}
+```
+
+Uses Qdrant (primary) for precise semantic matching and Neo4j (kg) for deep graph traversal. Combines scores with a 60/40 weighting.
+
+### Fast Approximate Search
+
+```mnm
+query FastSearch(input: string): Knowledge[] {
+  from Knowledge
+  where semantic_match(input, backend: "fast", threshold: 0.7) as score
+  order by score desc
+  limit 10
+}
+```
+
+Uses ChromaDB (fast) for quick approximate results. Higher threshold compensates for lower precision.
+
+## The Complete File
+
+```mnm
+config {
+  storage: sqlite("./data/multi.db")
+  vector: {
+    primary: auto("qdrant"),
+    fast: auto("chromadb")
+  }
+  graph: {
+    kg: auto("neo4j"),
+    social: auto("memgraph")
+  }
+  embedding: openai("text-embedding-3-small")
+  extractor: openai("gpt-4o-mini")
+}
+
+namespace multi_agent {
+
+  memory Knowledge {
+    content: string
+    subject: string
+    predicate: string
+    object: string
+    confidence: float[0,1]
+    source: string?
+    created_at: timestamp
+
+    @index subject
+    @index predicate
+  }
+
+  on ingest(content: string) {
+    content |> extract() |> store()
+  }
+
+  query Search(input: string): Knowledge[] {
+    from Knowledge
+    where semantic_match(input, backend: "primary", threshold: 0.5) as sm
+      and graph_match(input, backend: "kg", hops: 2) as gm
+    order by sm * 0.6 + gm * 0.4 desc
+    limit 20
+  }
+
+  query FastSearch(input: string): Knowledge[] {
+    from Knowledge
+    where semantic_match(input, backend: "fast", threshold: 0.7) as score
+    order by score desc
+    limit 10
+  }
+
+  update Knowledge {
+    on_conflict(old, new) {
+      if new.confidence > old.confidence {
+        supersede(old, new)
+      } else {
+        discard(new)
+      }
+    }
+  }
+}
+```
+
+## Try It Out
+
+```bash
+synapse apply multi_backend.mnm
+
+# Ingest some knowledge
+synapse emit ingest '{"content": "Alice is a senior engineer at Acme Corp who specializes in distributed systems"}'
+synapse emit ingest '{"content": "Bob manages the engineering team at Acme Corp and reports to Carol"}'
+
+# High-accuracy search (Qdrant + Neo4j)
+synapse query Search '{"input": "Who works at Acme Corp?"}'
+
+# Fast search (ChromaDB only)
+synapse query FastSearch '{"input": "engineering team"}'
+
+# Inspect all backends
+synapse inspect
+```

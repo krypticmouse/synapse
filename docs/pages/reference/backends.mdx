@@ -1,0 +1,91 @@
+# Storage Backends
+
+Synapse supports multiple storage backends across three categories: relational, vector, and graph. Each `store()` call writes to all configured backends simultaneously.
+
+## Relational
+
+### SQLite
+
+Primary record store. Every memory type gets a table with columns matching its fields. Handles `WHERE` conditions, `ORDER BY`, `LIMIT`, and raw SQL.
+
+| Config | `storage: sqlite("./path/to/db")` |
+|--------|-----------------------------------|
+| Auto-spawn | No (embedded) |
+| Data | Stored at the given file path |
+
+Tables and indexes are created automatically from memory schemas. Each `@index` declaration produces a `CREATE INDEX IF NOT EXISTS` on the corresponding column.
+
+## Vector
+
+Vector databases store embeddings for semantic search. On `store()`, the record's `content` field is embedded using the configured embedding model and stored as a vector point.
+
+### Qdrant
+
+| Config | `vector: qdrant("localhost:6333")` or `auto("qdrant")` |
+|--------|-------------------------------------------------------|
+| Auto-spawn | `qdrant/qdrant`, ports 6333 (HTTP) + 6334 (gRPC) |
+| Data | `.synapse/qdrant_storage` |
+
+### ChromaDB
+
+| Config | `vector: chromadb("http://localhost:8000")` or `auto("chromadb")` |
+|--------|------------------------------------------------------------------|
+| Auto-spawn | `chromadb/chroma`, port 8000 |
+
+### Pinecone
+
+| Config | `vector: pinecone("https://index-name.svc.environment.pinecone.io")` |
+|--------|----------------------------------------------------------------------|
+| Auto-spawn | No (cloud service) |
+
+### Weaviate
+
+| Config | `vector: weaviate("http://localhost:8080")` or `auto("weaviate")` |
+|--------|------------------------------------------------------------------|
+| Auto-spawn | `semitechnologies/weaviate`, port 8080 |
+
+## Graph
+
+Graph databases store knowledge graphs. On `store()`, if a record has `subject`, `predicate`, and `object` fields, a triple is created: `(subject)-[predicate]->(object)`, linked to the record via `HAS_FACT` edges.
+
+### Neo4j
+
+| Config | `graph: neo4j("bolt://localhost:7687")` or `auto("neo4j")` |
+|--------|-----------------------------------------------------------|
+| Auto-spawn | `neo4j:latest`, ports 7687 (Bolt) + 7474 (HTTP), auth disabled |
+| Data | `.synapse/neo4j_data` |
+
+### Memgraph
+
+| Config | `graph: memgraph("bolt://localhost:7688")` or `auto("memgraph")` |
+|--------|----------------------------------------------------------------|
+| Auto-spawn | `memgraph/memgraph`, port 7688 |
+
+### ArangoDB
+
+| Config | `graph: arangodb("http://localhost:8529")` or `auto("arangodb")` |
+|--------|----------------------------------------------------------------|
+| Auto-spawn | `arangodb/arangodb`, port 8529 |
+
+### SurrealDB
+
+| Config | `graph: surrealdb("http://localhost:8000")` or `auto("surrealdb")` |
+|--------|------------------------------------------------------------------|
+| Auto-spawn | `surrealdb/surrealdb`, port 8000 |
+
+## Multi-Backend Query Pipeline
+
+When a query uses `semantic_match`, `graph_match`, or `cypher`, the runtime orchestrates across backends:
+
+1. **Graph backend** returns matching entity IDs (via `graph_match` or `cypher`)
+2. **Vector backend** returns matching record IDs with similarity scores (via `semantic_match`)
+3. IDs are **unioned** (either backend can contribute results)
+4. **SQLite** fetches full records for the candidate IDs
+5. Remaining `WHERE` conditions are applied
+6. Scores are attached and sorting is applied
+7. `LIMIT` is applied last
+
+Key behaviors:
+- `limit` is deferred until after scoring when semantic/graph backends are active
+- If SQLite has no results, records are fetched directly from graph/vector backends as fallback
+- `_score` is a virtual field computed in-memory, never persisted

@@ -1,0 +1,171 @@
+# Queries
+
+Named queries define how you retrieve data from the memory system. They support filtering, sorting, limiting, semantic search, graph traversal, and custom scoring.
+
+## Basic Syntax
+
+```mnm
+query QueryName(param1: type1, param2: type2): ReturnType {
+  from MemoryType
+  where condition
+  order by expression asc|desc
+  limit count
+}
+```
+
+All clauses except `from` are optional.
+
+## Simple Query
+
+```mnm
+query GetAll(): Note[] {
+  from Note
+  order by created_at desc
+}
+```
+
+## Filtering with WHERE
+
+Standard comparison operators work against stored fields:
+
+```mnm
+query BySource(source: string): Fact[] {
+  from Fact
+  where source == source
+  order by created_at desc
+  limit 20
+}
+
+query HighConfidence(): Fact[] {
+  from Fact
+  where confidence > 0.8
+  order by confidence desc
+}
+```
+
+Operators: `==`, `!=`, `<`, `<=`, `>`, `>=`. Combine with `and` and `or`.
+
+## Semantic Search
+
+Use `semantic_match()` to find records by vector similarity:
+
+```mnm
+query Search(input: string): Fact[] {
+  from Fact
+  where semantic_match(input, threshold: 0.6)
+  order by _score desc
+  limit 10
+}
+```
+
+This embeds the `input` string, searches the vector backend, and returns records whose cosine similarity exceeds the threshold. Each result gets a virtual `_score` field (0.0 to 1.0).
+
+### Targeting a Specific Vector Backend
+
+With multiple named vector backends, specify which one to search:
+
+```mnm
+query FastSearch(input: string): Fact[] {
+  from Fact
+  where semantic_match(input, backend: "fast", threshold: 0.7) as score
+  order by score desc
+  limit 10
+}
+```
+
+## Graph Traversal
+
+Use `graph_match()` to find records connected in the knowledge graph:
+
+```mnm
+query Related(input: string): Fact[] {
+  from Fact
+  where graph_match(input, hops: 2)
+  order by confidence desc
+  limit 15
+}
+```
+
+This traverses the graph starting from entities matching `input`, following edges up to `hops` levels deep.
+
+### Raw Cypher Queries
+
+For full control over graph queries:
+
+```mnm
+query RelatedEntities(topic: string): Entity[] {
+  from Entity
+  where cypher("
+    MATCH (e:Entity {name: $topic})-[*1..2]-(related:Entity)
+    RETURN DISTINCT related.name as name
+  ")
+  limit 20
+}
+```
+
+Parameters prefixed with `$` are resolved from the query scope.
+
+## Hybrid Queries
+
+Combine semantic search and graph traversal in a single query:
+
+```mnm
+query DeepSearch(input: string): Fact[] {
+  from Fact
+  where semantic_match(input, threshold: 0.5)
+    and graph_match(input, hops: 3)
+  order by confidence desc
+  limit 10
+}
+```
+
+The runtime unions candidate IDs from both backends, fetches full records, and applies the remaining filters.
+
+## Score Aliases
+
+The `as` keyword lets you alias scores from search functions, then combine them in `order by`:
+
+```mnm
+query Search(input: string): Knowledge[] {
+  from Knowledge
+  where semantic_match(input, backend: "primary", threshold: 0.5) as sm
+    and graph_match(input, backend: "kg", hops: 2) as gm
+  order by sm * 0.6 + gm * 0.4 desc
+  limit 20
+}
+```
+
+This creates a custom ranking formula: 60% semantic similarity + 40% graph connectivity.
+
+## Additional Filter Functions
+
+| Function | Description |
+|----------|-------------|
+| `semantic_match(input, threshold: 0.6)` | Vector similarity search |
+| `semantic_match(input, backend: "name", threshold: 0.6)` | Target a specific vector backend |
+| `graph_match(input, hops: 2)` | Graph traversal |
+| `graph_match(input, backend: "name", hops: 2)` | Target a specific graph backend |
+| `cypher("MATCH ... RETURN ...")` | Raw Cypher query |
+| `regex(field, "pattern")` | Regex filter (in-memory) |
+| `sql("SELECT ...")` | Raw SQL on relational backend |
+
+## Querying Multiple Memory Types
+
+```mnm
+query Combined(query: string): Fact[] {
+  from Fact, DocumentChunk
+  where semantic_match(query, threshold: 0.6)
+  limit 15
+}
+```
+
+## Calling Queries from Code
+
+Named queries can be called as functions in handlers and update rules:
+
+```mnm
+on check(subject: string) {
+  let results = EntityHistory(subject)
+  # use results...
+}
+```

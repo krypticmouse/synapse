@@ -1,0 +1,193 @@
+# Update Rules
+
+Update rules define the lifecycle behavior of a memory type. They handle access tracking, conflict resolution, and periodic maintenance.
+
+## Basic Syntax
+
+```mnm
+update MemoryType {
+  on_access { ... }
+  on_conflict(old, new) { ... }
+  every duration { ... }
+}
+```
+
+All three rule types are optional. You can include any combination.
+
+## on_access
+
+Runs whenever a record of this type is read (accessed through a query):
+
+```mnm
+update Fact {
+  on_access {
+    accessed_at = now()
+  }
+}
+```
+
+Inside `on_access`, field names refer to the current record. Assignments update the record in place.
+
+## on_conflict
+
+Runs when a new record conflicts with an existing one. Synapse detects conflicts using `subject` + `predicate` fields (SPO triple matching) or `@index` fields.
+
+```mnm
+update Fact {
+  on_conflict(old, new) {
+    if new.confidence > old.confidence {
+      supersede(old, new)
+    } else {
+      discard(new)
+    }
+  }
+}
+```
+
+The parameters `old` and `new` are the existing and incoming records, respectively. You have several options:
+
+| Action | Description |
+|--------|-------------|
+| `supersede(old, new)` | Mark `old` as superseded by `new`, store both. Sets `old.superseded_by = new.id` and `old.valid_until = now()`. |
+| `discard(new)` | Drop the new record, keep the old one. |
+| `store(new)` | Force-store the new record alongside the old one. |
+| `delete(old)` | Delete the old record, then store the new one. |
+| Direct mutation | Modify `old` fields, then `store(old)` to update in place. |
+
+### Temporal Superseding
+
+A common pattern for temporal knowledge graphs:
+
+```mnm
+update Fact {
+  on_conflict(old, new) {
+    if new.valid_from > old.valid_from {
+      old.valid_until = new.valid_from
+      old.superseded_by = new.id
+      store(new)
+    } else {
+      discard(new)
+    }
+  }
+}
+```
+
+This preserves the full history: old facts are not deleted but marked with an end date and a pointer to their replacement.
+
+### Newer-Wins
+
+For simpler use cases:
+
+```mnm
+update Preference {
+  on_conflict(old, new) {
+    supersede(old, new)
+  }
+}
+```
+
+## every (Periodic Rules)
+
+Runs on a schedule against all records of this type. Duration units: `s` (seconds), `m` (minutes), `h` (hours), `d` (days), `w` (weeks).
+
+### Confidence Decay
+
+```mnm
+update Fact {
+  every 24h {
+    confidence = confidence * 0.95
+    if confidence < 0.1 {
+      delete()
+    }
+  }
+}
+```
+
+This reduces confidence by 5% daily and deletes facts that fall below 0.1.
+
+### Access-Based Importance Boost
+
+```mnm
+update ArchivalEntry {
+  on_access {
+    accessed_at = now()
+    access_count = access_count + 1
+    importance = min(importance + 0.05, 1.0)
+  }
+
+  every 24h {
+    if accessed_at < now() - 7d {
+      importance = importance * 0.9
+    }
+
+    if importance < 0.1 and accessed_at < now() - 30d {
+      archive()
+    }
+  }
+}
+```
+
+### Conversation Compaction
+
+Summarize old conversations and move them to archival storage:
+
+```mnm
+update ConversationMessage {
+  every 7d {
+    from ConversationMessage
+    where timestamp < now() - 30d
+    |> group_by(session_id)
+    |> summarize()
+    |> store_as(ArchivalEntry)
+    |> delete_originals()
+  }
+}
+```
+
+## Combining All Rule Types
+
+A complete update block with all three rule types:
+
+```mnm
+update ArchivalEntry {
+  on_access {
+    accessed_at = now()
+    access_count = access_count + 1
+    importance = min(importance + 0.05, 1.0)
+  }
+
+  on_conflict(old, new) {
+    if semantic_match(old.content, new.content, threshold: 0.9) {
+      old.content = new.content
+      old.importance = max(old.importance, new.importance)
+      discard(new)
+    } else {
+      store(new)
+    }
+  }
+
+  every 24h {
+    if accessed_at < now() - 7d {
+      importance = importance * 0.9
+    }
+    if importance < 0.1 and accessed_at < now() - 30d {
+      archive()
+    }
+  }
+}
+```
+
+## Available Functions in Update Rules
+
+| Function | Description |
+|----------|-------------|
+| `store(record)` | Store a record |
+| `delete()` | Delete the current record |
+| `archive()` | Mark as `_archived: true` |
+| `supersede(old, new)` | Replace old with new, preserving history |
+| `discard(record)` | No-op, explicitly ignore |
+| `now()` | Current timestamp |
+| `min(a, b)` / `max(a, b)` | Numeric min/max |
+| `len(arr)` | Array/string length |
+| `semantic_match(a, b, threshold)` | Similarity check |
+| Named queries | Call any defined query as a function |

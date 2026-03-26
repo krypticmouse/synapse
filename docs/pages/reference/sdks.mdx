@@ -1,0 +1,87 @@
+# SDKs
+
+Synapse provides client libraries for interacting with a running runtime from Python and Rust.
+
+## Python
+
+### Installation
+
+```bash
+cd crates/synapse-python
+PYO3_PYTHON=python3 maturin develop
+```
+
+### Usage
+
+```python
+from synapse import SynapseClient
+
+client = SynapseClient("http://localhost:8080")
+
+# Emit an event
+client.emit("save", {"content": "Hello from Python!"})
+
+# Run a query
+notes = client.query("GetAll")
+print(notes)
+
+# Search
+results = client.query("Search", {"input": "machine learning"})
+for r in results:
+    print(r["content"], r["_score"])
+```
+
+## Rust
+
+### Installation
+
+Add to your `Cargo.toml`:
+
+```toml
+[dependencies]
+synapse-client = { path = "path/to/synapse/crates/synapse-client" }
+tokio = { version = "1", features = ["full"] }
+serde_json = "1"
+```
+
+### Usage
+
+```rust
+use synapse_client::Client;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let client = Client::new("http://localhost:8080");
+
+    // Emit an event
+    client.emit("save", serde_json::json!({
+        "content": "Hello from Rust!"
+    })).await?;
+
+    // Run a query
+    let notes = client.query("GetAll", serde_json::json!({})).await?;
+    println!("{}", serde_json::to_string_pretty(&notes)?);
+
+    // Check health
+    let health = client.health().await?;
+    println!("Status: {}", health["status"]);
+
+    Ok(())
+}
+```
+
+## HTTP
+
+You can also interact with the runtime directly via HTTP. See the [HTTP API reference](/reference/http-api) for all endpoints.
+
+```bash
+# Emit
+curl -X POST http://localhost:8080/emit \
+  -H "Content-Type: application/json" \
+  -d '{"event": "save", "payload": {"content": "Hello via curl"}}'
+
+# Query
+curl -X POST http://localhost:8080/query \
+  -H "Content-Type: application/json" \
+  -d '{"query": "GetAll", "params": {}}'
+```

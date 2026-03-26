@@ -1,0 +1,113 @@
+# HTTP API
+
+The runtime exposes a REST API on `localhost:8080` (configurable via `--port`).
+
+## Endpoints
+
+### GET /health
+
+Returns the health status and uptime.
+
+```bash
+curl http://localhost:8080/health
+```
+
+```json
+{
+  "status": "healthy",
+  "uptime_secs": 142
+}
+```
+
+### GET /status
+
+Returns handlers, queries, memories, channels, and uptime.
+
+```bash
+curl http://localhost:8080/status
+```
+
+```json
+{
+  "status": "running",
+  "handlers": ["save", "ingest"],
+  "queries": ["GetAll", "Search"],
+  "memories": ["Note", "Fact"],
+  "channels": ["slack_feed", "discord_feed"],
+  "uptime_secs": 142
+}
+```
+
+### POST /emit
+
+Trigger an event handler.
+
+```bash
+curl -X POST http://localhost:8080/emit \
+  -H "Content-Type: application/json" \
+  -d '{"event": "save", "payload": {"content": "Hello"}}'
+```
+
+```json
+{
+  "success": true,
+  "event": "save",
+  "stored": 1
+}
+```
+
+### POST /query
+
+Execute a named query.
+
+```bash
+curl -X POST http://localhost:8080/query \
+  -H "Content-Type: application/json" \
+  -d '{"query": "Search", "params": {"input": "machine learning"}}'
+```
+
+Returns an array of matching records.
+
+### GET /inspect
+
+Dump all backend contents (all memory types, all backends).
+
+```bash
+curl http://localhost:8080/inspect
+```
+
+Returns a JSON object with keys like `sqlite`, `vector_primary`, `graph_kg`, each containing record counts and data per memory type.
+
+### POST /reload
+
+Hot-reload the `.mnm` source file.
+
+```bash
+curl -X POST http://localhost:8080/reload
+```
+
+```json
+{
+  "success": true,
+  "message": "runtime reloaded"
+}
+```
+
+### POST /clear
+
+Delete all records from all backends.
+
+```bash
+curl -X POST http://localhost:8080/clear
+```
+
+```json
+{
+  "success": true,
+  "cleared": {
+    "sqlite": ["Note", "Fact"],
+    "vector_default": ["Note", "Fact"],
+    "graph_default": ["Note", "Fact"]
+  }
+}
+```

@@ -1,0 +1,119 @@
+# Letta (Tiered Memory)
+
+A tiered memory system inspired by [Letta](https://www.letta.com/) (formerly MemGPT) with core blocks, recall memory, and archival storage. Demonstrates self-editing memory via extern functions.
+
+**Requires:** Docker (for Qdrant)
+
+```mnm
+config {
+  storage: sqlite("./letta.db")
+  vector: auto
+  graph: none
+  embedding: openai("text-embedding-3-small")
+  extractor: openai("gpt-4o")
+}
+
+namespace letta_agent {
+  # Always-in-context core blocks
+  memory CoreBlock {
+    label: string
+    content: string
+    char_limit: int
+
+    @index label
+    @invariant content.length <= char_limit
+  }
+
+  # Searchable conversation history
+  memory ConversationMessage {
+    role: string
+    content: string
+    session_id: string
+    timestamp: timestamp
+
+    @index session_id
+  }
+
+  # Long-term factual storage
+  memory ArchivalEntry {
+    content: string
+    source: string
+    importance: float[0,1]
+    created_at: timestamp
+    accessed_at: timestamp
+    access_count: int
+
+    @index importance
+  }
+
+  # Agent can edit its own memory via LLM-simulated tools
+  @extern fn core_memory_replace(label: string, old_content: string, new_content: string): bool
+  @extern fn core_memory_append(label: string, content: string): bool
+  @extern fn archival_memory_insert(content: string): bool
+  @extern fn archival_memory_search(query: string, limit: int): ArchivalEntry[]
+
+  on message_received(role: string, content: string, session_id: string) {
+    store(ConversationMessage {
+      role: role,
+      content: content,
+      session_id: session_id,
+      timestamp: now()
+    })
+  }
+
+  query GetCoreMemory(): CoreBlock[] {
+    from CoreBlock
+    order by label asc
+  }
+
+  query SearchRecall(query: string): ConversationMessage[] {
+    from ConversationMessage
+    where semantic_match(query, threshold: 0.5)
+    order by timestamp desc
+    limit 50
+  }
+
+  query SearchArchival(query: string): ArchivalEntry[] {
+    from ArchivalEntry
+    where semantic_match(query, threshold: 0.6)
+    order by importance desc
+    limit 20
+  }
+
+  update ArchivalEntry {
+    on_access {
+      accessed_at = now()
+      access_count = access_count + 1
+      importance = min(importance + 0.05, 1.0)
+    }
+
+    every 24h {
+      if accessed_at < now() - 7d {
+        importance = importance * 0.9
+      }
+      if importance < 0.1 and accessed_at < now() - 30d {
+        archive()
+      }
+    }
+  }
+
+  update ConversationMessage {
+    every 7d {
+      from ConversationMessage
+      where timestamp < now() - 30d
+      |> group_by(session_id)
+      |> summarize()
+      |> store_as(ArchivalEntry)
+      |> delete_originals()
+    }
+  }
+}
+```
+
+## What It Demonstrates
+
+- Three-tier memory: core (always available), recall (searchable history), archival (long-term)
+- `@invariant` for enforcing size limits on core blocks
+- `@extern fn` for LLM-simulated memory editing tools
+- Periodic conversation compaction: old messages are summarized and moved to archival
+- Access-based importance boosting

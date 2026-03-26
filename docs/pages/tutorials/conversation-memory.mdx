@@ -1,0 +1,176 @@
+# Tutorial: Conversation Memory
+
+In this tutorial, you will build a conversation memory system with session management, message archival, and summarization. This pattern is used in chatbot and agent frameworks to maintain context across interactions.
+
+## What You Will Learn
+
+- Namespaces for organizing code
+- Multiple memory types in one system
+- Session-based filtering
+- Event-driven archival with summarization
+
+## The Design
+
+We need two memory types:
+
+1. **Message**: Individual conversation messages with a session ID
+2. **SessionSummary**: Compressed summaries of archived sessions
+
+Messages accumulate in real time. When a session is archived, its messages are summarized into a compact form.
+
+## The Complete Implementation
+
+```mnm
+config {
+  storage: sqlite("./data/conversation.db")
+}
+
+namespace chat {
+
+  memory Message {
+    role: string
+    content: string
+    session_id: string
+    created_at: timestamp
+  }
+
+  memory SessionSummary {
+    session_id: string
+    summary: string
+    message_count: int
+    created_at: timestamp
+  }
+
+  on message(role: string, content: string, session_id: string) {
+    store(Message {
+      role: role,
+      content: content,
+      session_id: session_id,
+      created_at: now()
+    })
+  }
+
+  on archive_session(session_id: string, summary: string) {
+    store(SessionSummary {
+      session_id: session_id,
+      summary: summary,
+      message_count: 0,
+      created_at: now()
+    })
+  }
+
+  query RecentMessages(session_id: string): Message[] {
+    from Message
+    where session_id == session_id
+    order by created_at desc
+    limit 50
+  }
+
+  query GetSummaries(): SessionSummary[] {
+    from SessionSummary
+    order by created_at desc
+  }
+
+  query SearchMessages(role: string): Message[] {
+    from Message
+    where role == role
+    order by created_at desc
+    limit 20
+  }
+}
+```
+
+## Walkthrough
+
+### The namespace
+
+Everything is wrapped in `namespace chat`. This is organizational only but keeps related declarations grouped.
+
+### Two memory types
+
+`Message` stores individual utterances with `role` (user/assistant/system), `content`, and a `session_id` to group messages into conversations.
+
+`SessionSummary` stores the compressed version of an entire session.
+
+### The message handler
+
+Every time a message arrives, it is stored with the current timestamp:
+
+```mnm
+on message(role: string, content: string, session_id: string) {
+  store(Message {
+    role: role,
+    content: content,
+    session_id: session_id,
+    created_at: now()
+  })
+}
+```
+
+### The archive handler
+
+When a session is complete, the caller provides a summary:
+
+```mnm
+on archive_session(session_id: string, summary: string) {
+  store(SessionSummary {
+    session_id: session_id,
+    summary: summary,
+    message_count: 0,
+    created_at: now()
+  })
+}
+```
+
+### Queries
+
+Three queries cover the common access patterns: get recent messages in a session, list all summaries, and filter messages by role.
+
+## Try It Out
+
+```bash
+synapse apply conversation.mnm
+
+# Simulate a conversation
+synapse emit message '{"role": "user", "content": "What is Rust?", "session_id": "sess_1"}'
+synapse emit message '{"role": "assistant", "content": "Rust is a systems programming language focused on safety and performance.", "session_id": "sess_1"}'
+synapse emit message '{"role": "user", "content": "How does ownership work?", "session_id": "sess_1"}'
+
+# Retrieve the conversation
+synapse query RecentMessages '{"session_id": "sess_1"}'
+
+# Archive it
+synapse emit archive_session '{"session_id": "sess_1", "summary": "Discussed Rust basics and ownership model"}'
+
+# View summaries
+synapse query GetSummaries
+```
+
+## Adding Semantic Search
+
+To make messages searchable by meaning, add a vector backend:
+
+```mnm
+config {
+  storage: sqlite("./data/conversation.db")
+  vector: auto("qdrant")
+  embedding: openai("text-embedding-3-small")
+}
+```
+
+Then add a semantic search query:
+
+```mnm
+query SearchByMeaning(input: string): Message[] {
+  from Message
+  where semantic_match(input, threshold: 0.6)
+  order by _score desc
+  limit 20
+}
+```
+
+Now you can search across all conversations by meaning:
+
+```bash
+synapse query SearchByMeaning '{"input": "memory management in programming"}'
+```

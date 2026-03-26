@@ -1,0 +1,254 @@
+# Built-in Functions
+
+Synapse provides built-in functions for storage, time, LLM operations, search, and data transformation.
+
+## Storage Functions
+
+### store(record)
+
+Validate `@invariant` constraints, then store to all configured backends (SQLite, vector, graph). If the record conflicts with an existing one and `on_conflict` rules are defined, those rules run instead of a direct store.
+
+```mnm
+store(Note { content: "hello", created_at: now() })
+```
+
+### delete(record?)
+
+Delete a record. When called without arguments inside an `every` update rule, deletes the current record.
+
+```mnm
+delete(record)    # delete a specific record
+delete()          # delete current record (in update rules)
+```
+
+### archive()
+
+Mark the current record as `_archived: true`. Used in update rules.
+
+```mnm
+every 30d {
+  if importance < 0.1 { archive() }
+}
+```
+
+### supersede(old, new)
+
+Replace `old` with `new`, preserving history. Sets `old.superseded_by = new.id` and `old.valid_until = now()`, then stores both.
+
+```mnm
+on_conflict(old, new) {
+  supersede(old, new)
+}
+```
+
+### discard(record?)
+
+No-op. Explicitly indicates a record should be ignored. Used in `on_conflict` to drop the incoming record.
+
+```mnm
+on_conflict(old, new) {
+  discard(new)
+}
+```
+
+## Time Functions
+
+### now()
+
+Returns the current UTC timestamp.
+
+```mnm
+let t = now()
+store(Note { content: "hello", created_at: now() })
+```
+
+## Numeric Functions
+
+### len(value)
+
+Returns the length of an array or string.
+
+```mnm
+let count = len(items)
+let chars = len(text)
+```
+
+### min(a, b)
+
+Returns the smaller of two numbers.
+
+```mnm
+importance = min(importance + 0.05, 1.0)
+```
+
+### max(a, b)
+
+Returns the larger of two numbers.
+
+```mnm
+confidence = max(old.confidence, new.confidence)
+```
+
+## LLM Functions
+
+These require `extractor` to be configured in the `config` block.
+
+### extract(text)
+
+Sends text to the configured LLM model with a structured extraction prompt. Returns an array of fact records with `content`, `subject`, `predicate`, `object`, `confidence`, and `valid_from` fields.
+
+```mnm
+let facts = extract(text)
+content |> extract() |> store()
+```
+
+### summarize(text)
+
+Sends text to the LLM with a summarization prompt. Returns a string.
+
+```mnm
+let summary = summarize(messages)
+messages |> summarize()
+```
+
+## Search Functions
+
+Used primarily in query `where` clauses but can also be called from handlers.
+
+### semantic_match(input, ...)
+
+Vector similarity search. In a query `where` clause, returns IDs and scores from the vector backend. As a standalone function, compares two strings and returns a boolean.
+
+**In queries:**
+
+```mnm
+where semantic_match(input, threshold: 0.6)
+where semantic_match(input, backend: "primary", threshold: 0.5) as score
+```
+
+**As a function:**
+
+```mnm
+if semantic_match(old.content, new.content, threshold: 0.9) {
+  # very similar content
+}
+```
+
+| Parameter | Description |
+|-----------|-------------|
+| `threshold` | Minimum cosine similarity (0.0 to 1.0) |
+| `backend` | Target a specific named vector backend |
+
+### graph_match(input, ...)
+
+Graph traversal. Returns IDs of entities reachable from the input within the specified number of hops.
+
+```mnm
+where graph_match(input, hops: 2)
+where graph_match(input, backend: "kg", hops: 3)
+```
+
+| Parameter | Description |
+|-----------|-------------|
+| `hops` | Maximum traversal depth (default: 2) |
+| `backend` | Target a specific named graph backend |
+
+### cypher(query, ...)
+
+Raw Cypher query against the graph backend. Parameters prefixed with `$` are resolved from the query scope.
+
+```mnm
+where cypher("MATCH (e:Entity {name: $topic})-[*1..2]-(r) RETURN r._id AS id")
+```
+
+### regex(text, pattern)
+
+In-memory regex filter. Returns a boolean.
+
+```mnm
+where regex(content, "\\bRust\\b")
+```
+
+### sql(query)
+
+Raw SQL query against the relational backend. Returns an array of records.
+
+```mnm
+let results = sql("SELECT * FROM Fact WHERE confidence > 0.8")
+```
+
+## Event Functions
+
+### emit(event, ...)
+
+Emit an event, triggering the matching handler.
+
+```mnm
+emit("ingest", content)
+emit("connector_sync", connector_type, user_id)
+```
+
+## Pipe-Only Functions
+
+These functions are designed for use with the pipe operator `|>`.
+
+### map(fn)
+
+Transform each element in an array.
+
+```mnm
+facts |> map(f => f.content)
+facts |> map(f => Fact { content: f.content, confidence: f.confidence, created_at: now() })
+```
+
+### filter(fn)
+
+Keep elements that match a predicate.
+
+```mnm
+facts |> filter(f => f.confidence > 0.7)
+```
+
+### each(fn)
+
+Iterate over elements for side effects. Returns null.
+
+```mnm
+items |> each(item => store(item))
+```
+
+### group_by(field)
+
+Group an array of records by a field value. Returns an array of arrays.
+
+```mnm
+messages |> group_by(session_id)
+```
+
+### store_as(TypeName)
+
+Store all records in the array with the given type name.
+
+```mnm
+extracted |> store_as(ArchivalEntry)
+```
+
+### delete_originals()
+
+Delete all records in the array from storage.
+
+```mnm
+old_messages |> delete_originals()
+```
+
+## Config Functions
+
+### env(var_name)
+
+Read an environment variable. Used in channel `config` blocks.
+
+```mnm
+config {
+  token: env("SLACK_TOKEN")
+}
+```

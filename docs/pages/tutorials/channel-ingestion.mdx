@@ -1,0 +1,215 @@
+# Tutorial: Channel Ingestion
+
+In this tutorial, you will set up channels to automatically ingest data from Slack, Discord, and Telegram into your memory system. Channels handle both new messages (ingestion) and edited messages (updates).
+
+## What You Will Learn
+
+- Defining channel connectors in `.mnm` files
+- Configuring authentication via environment variables
+- Routing channel events to ingest and update pipelines
+- Setting up poll intervals
+- Multi-channel ingestion with shared update rules
+
+## The Problem
+
+Without channels, data only enters Synapse through manual `synapse emit` calls or the HTTP API. In practice, your agent's knowledge lives in Slack threads, Discord channels, Telegram groups, and dozens of other platforms. Channels automate the bridge.
+
+## Step 1: Define the Memory Schema
+
+```mnm
+config {
+  storage: sqlite("./data/channels.db")
+  vector: auto("qdrant")
+  embedding: openai("text-embedding-3-small")
+  extractor: openai("gpt-4o-mini")
+}
+
+namespace team_memory {
+  memory Message {
+    content: string
+    author: string
+    source: string
+    subject: string
+    predicate: string
+    object: string
+    confidence: float[0,1]
+    created_at: timestamp
+
+    @index source
+    @index author
+    @index subject
+  }
+}
+```
+
+## Step 2: Add a Slack Channel
+
+```mnm
+channel slack_feed {
+  source: slack
+  config {
+    token: env("SLACK_TOKEN")
+  }
+  poll_interval: 5m
+
+  on message -> ingest(content: string, author: string) {
+    content |> extract() |> store()
+  }
+
+  on edit -> update(content: string, message_id: string) {
+    content |> extract() |> store()
+  }
+}
+```
+
+Breaking this down:
+
+- `source: slack` tells Synapse to use the Slack connector
+- `config { token: env("SLACK_TOKEN") }` reads the Slack API token from an environment variable
+- `poll_interval: 5m` checks for new messages every 5 minutes
+- `on message -> ingest` routes new messages through the `ingest` pipeline
+- `on edit -> update` routes edited messages through the update pipeline, triggering `on_conflict` rules
+
+## Step 3: Add More Channels
+
+```mnm
+channel discord_feed {
+  source: discord
+  config {
+    token: env("DISCORD_TOKEN")
+  }
+  poll_interval: 5m
+
+  on message -> ingest(content: string, author: string) {
+    content |> extract() |> store()
+  }
+
+  on edit -> update(content: string) {
+    content |> extract() |> store()
+  }
+}
+
+channel telegram_feed {
+  source: telegram
+  config {
+    token: env("TELEGRAM_BOT_TOKEN")
+  }
+  poll_interval: 1m
+
+  on message -> ingest(content: string, author: string) {
+    content |> extract() |> store()
+  }
+}
+```
+
+Each channel is independent. They can have different poll intervals and handle different event types.
+
+## Step 4: Add the Ingest Handler and Update Rules
+
+```mnm
+on ingest(content: string) {
+  content |> extract() |> store()
+}
+
+update Message {
+  on_conflict(old, new) {
+    if new.confidence > old.confidence {
+      supersede(old, new)
+    } else {
+      discard(new)
+    }
+  }
+}
+```
+
+The `on ingest` handler is shared by all channels. When a channel routes an event `-> ingest`, it triggers this handler. The update rules handle conflicts uniformly regardless of which channel the data came from.
+
+## Step 5: Add Queries
+
+```mnm
+query Search(input: string): Message[] {
+  from Message
+  where semantic_match(input, threshold: 0.5)
+  order by created_at desc
+  limit 20
+}
+
+query BySource(source: string): Message[] {
+  from Message
+  where source == source
+  order by created_at desc
+  limit 50
+}
+
+query ByAuthor(author: string): Message[] {
+  from Message
+  where author == author
+  order by created_at desc
+  limit 50
+}
+```
+
+## Step 6: Run It
+
+Set up your environment variables:
+
+```bash
+export SLACK_TOKEN="xoxb-..."
+export DISCORD_TOKEN="..."
+export TELEGRAM_BOT_TOKEN="..."
+export OPENAI_API_KEY="sk-..."
+```
+
+Start the system:
+
+```bash
+synapse apply channels.mnm
+```
+
+Output:
+
+```
+Applying channels.mnm...
+  ✓ Compiled successfully
+  ✓ Connected to sqlite (./data/channels.db)
+  ✓ Qdrant [default] auto-started
+  ✓ Channel [slack_feed] connected via slack
+  ✓ Channel [discord_feed] connected via discord
+  ✓ Channel [telegram_feed] connected via telegram
+  ✓ Runtime listening on localhost:8080
+  ✓ 3 channel(s) active and polling
+```
+
+The channels start polling immediately. New messages from all three platforms are automatically extracted, stored, and made searchable.
+
+## Adding a Webhook Channel
+
+For platforms without a dedicated connector, use the generic webhook:
+
+```mnm
+channel webhook_feed {
+  source: webhook
+  config {
+    endpoint: env("WEBHOOK_URL")
+  }
+  poll_interval: 30s
+
+  on message -> ingest(content: string) {
+    content |> extract() |> store()
+  }
+}
+```
+
+## The Data Flow
+
+```
+  Slack ─────┐
+  Discord ───┤
+  Telegram ──┤──▶ Channel Manager ──▶ on ingest() ──▶ extract() ──▶ store()
+  Webhook ───┘                                                        │
+                                                                      ▼
+                                                              on_conflict()
+                                                            (update rules)
+```
+
+All channels converge into the same ingestion pipeline. Edits flow through the same path, but `store()` triggers `on_conflict` rules when matching records exist.

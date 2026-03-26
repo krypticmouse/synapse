@@ -1,0 +1,44 @@
+# Hello World
+
+The simplest Synapse memory system. Store notes and retrieve them.
+
+```mnm
+config {
+  storage: sqlite("./data/hello.db")
+}
+
+memory Note {
+  content: string
+  created_at: timestamp
+}
+
+on save(content: string) {
+  store(Note {
+    content: content,
+    created_at: now()
+  })
+}
+
+query GetAll(): Note[] {
+  from Note
+  order by created_at desc
+}
+```
+
+## Usage
+
+```bash
+synapse apply examples/hello.mnm
+
+synapse emit save '{"content": "Meeting at 3pm tomorrow"}'
+synapse query GetAll
+```
+
+## What It Demonstrates
+
+- Minimal `config` block with SQLite only
+- A single `memory` type with two fields
+- An event handler that constructs and stores a record
+- A query with ordering
+
+See the [Hello World tutorial](/tutorials/hello-world) for a step-by-step walkthrough.

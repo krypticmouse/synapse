@@ -1,0 +1,77 @@
+# User Profile
+
+Preference tracking and interaction logging with sentiment scoring.
+
+```mnm
+config {
+  storage: sqlite("./data/profiles.db")
+}
+
+memory Preference {
+  user_id: string
+  key: string
+  value: string
+  updated_at: timestamp
+}
+
+memory Interaction {
+  user_id: string
+  topic: string
+  sentiment: float[0.0,1.0]
+  created_at: timestamp
+}
+
+on set_preference(user_id: string, key: string, value: string) {
+  store(Preference {
+    user_id: user_id,
+    key: key,
+    value: value,
+    updated_at: now()
+  })
+}
+
+on interaction(user_id: string, topic: string, sentiment: float) {
+  store(Interaction {
+    user_id: user_id,
+    topic: topic,
+    sentiment: sentiment,
+    created_at: now()
+  })
+}
+
+query GetPreferences(user_id: string): Preference[] {
+  from Preference
+  where user_id == user_id
+  order by updated_at desc
+}
+
+query TopTopics(user_id: string): Interaction[] {
+  from Interaction
+  where user_id == user_id
+  order by sentiment desc
+  limit 10
+}
+
+update Preference {
+  on_conflict(old, new) {
+    supersede(old, new)
+  }
+}
+```
+
+## Usage
+
+```bash
+synapse apply examples/user_profile.mnm --port 9090
+
+synapse emit set_preference '{"user_id": "u1", "key": "theme", "value": "dark"}'
+synapse emit interaction '{"user_id": "u1", "topic": "machine learning", "sentiment": 0.9}'
+synapse query TopTopics '{"user_id": "u1"}'
+```
+
+## What It Demonstrates
+
+- Key-value style preferences with `on_conflict` auto-update
+- Sentiment scoring with bounded floats
+- User-scoped queries
+- Simple conflict resolution (newer always wins)

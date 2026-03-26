@@ -1,0 +1,160 @@
+# Event Handlers
+
+Event handlers define how the system responds to incoming events. They are the primary way data enters the system.
+
+## Basic Syntax
+
+```mnm
+on event_name(param1: type1, param2: type2) {
+  # handler body
+}
+```
+
+When an event is emitted (via `synapse emit`, the HTTP API, or a channel), the matching handler runs with parameters bound from the JSON payload.
+
+## Example: Simple Store
+
+```mnm
+on save(content: string) {
+  store(Note {
+    content: content,
+    created_at: now()
+  })
+}
+```
+
+Trigger it:
+
+```bash
+synapse emit save '{"content": "Remember to buy milk"}'
+```
+
+## Example: LLM Extraction Pipeline
+
+The real power of handlers comes from combining them with pipe chains and LLM functions:
+
+```mnm
+on ingest(content: string) {
+  content
+    |> extract()
+    |> store()
+}
+```
+
+This three-line handler:
+1. Takes raw text
+2. Sends it to an LLM which extracts structured facts (subject/predicate/object triples)
+3. Stores each extracted fact to all configured backends
+
+## Example: Conditional Logic
+
+Handlers support full control flow:
+
+```mnm
+on learn(content: string, source: string) {
+  let conf = 0.8
+
+  if source == "stated" {
+    conf = 1.0
+  }
+
+  store(Fact {
+    content: content,
+    source: source,
+    confidence: conf,
+    created_at: now(),
+    accessed_at: now()
+  })
+}
+```
+
+## Example: Processing Collections
+
+Use `for` loops or pipe functions to process arrays:
+
+```mnm
+on conversation_end(session_id: string, messages: Message[]) {
+  # Store the episode
+  let episode = Episode {
+    session_id: session_id,
+    content: messages |> summarize(),
+    created_at: now()
+  }
+  store(episode)
+
+  # Extract and store individual facts
+  let facts = messages |> extract()
+  for fact in facts {
+    store(fact)
+  }
+}
+```
+
+## Pipe Chains in Handlers
+
+The pipe operator `|>` passes the left value as the first argument to the right function. Several built-in functions are designed for pipe chains:
+
+```mnm
+on process(content: string) {
+  content
+    |> extract()                            # LLM extraction
+    |> filter(f => f.confidence > 0.7)      # keep high-confidence
+    |> map(f => Fact {                      # transform shape
+        content: f.content,
+        subject: f.subject,
+        predicate: f.predicate,
+        object: f.object,
+        confidence: f.confidence,
+        created_at: now()
+    })
+    |> store()                              # persist everything
+}
+```
+
+## Calling Queries from Handlers
+
+Named queries can be called as regular functions inside handlers:
+
+```mnm
+query FindBySubject(subject: string): Fact[] {
+  from Fact
+  where subject == subject
+  limit 10
+}
+
+on check_existing(subject: string, new_content: string) {
+  let existing = FindBySubject(subject)
+  if len(existing) == 0 {
+    store(Fact {
+      content: new_content,
+      subject: subject,
+      predicate: "is",
+      object: new_content,
+      confidence: 0.9,
+      created_at: now()
+    })
+  }
+}
+```
+
+## Emitting Events from Handlers
+
+Handlers can trigger other handlers using `emit()`:
+
+```mnm
+on batch_ingest(items: string[]) {
+  for item in items {
+    emit("ingest", item)
+  }
+}
+```
+
+## Parameter Binding
+
+When an event is emitted with a JSON payload, parameters are bound by name:
+
+```bash
+synapse emit learn '{"content": "User likes Python", "source": "stated"}'
+```
+
+This binds `content = "User likes Python"` and `source = "stated"` in the handler.

@@ -1,0 +1,73 @@
+# Multi-Backend
+
+Multiple named vector and graph backends with targeted queries and score aliases for custom ranking.
+
+**Requires:** Docker
+
+See the full [Multi-Backend tutorial](/tutorials/multi-backend) for a detailed walkthrough.
+
+```mnm
+config {
+  storage: sqlite("./data/multi.db")
+  vector: {
+    primary: auto("qdrant"),
+    fast: auto("chromadb")
+  }
+  graph: {
+    kg: auto("neo4j"),
+    social: auto("memgraph")
+  }
+  embedding: openai("text-embedding-3-small")
+  extractor: openai("gpt-4o-mini")
+}
+
+namespace multi_agent {
+  memory Knowledge {
+    content: string
+    subject: string
+    predicate: string
+    object: string
+    confidence: float[0,1]
+    source: string?
+    created_at: timestamp
+    @index subject
+    @index predicate
+  }
+
+  on ingest(content: string) {
+    content |> extract() |> store()
+  }
+
+  query Search(input: string): Knowledge[] {
+    from Knowledge
+    where semantic_match(input, backend: "primary", threshold: 0.5) as sm
+      and graph_match(input, backend: "kg", hops: 2) as gm
+    order by sm * 0.6 + gm * 0.4 desc
+    limit 20
+  }
+
+  query FastSearch(input: string): Knowledge[] {
+    from Knowledge
+    where semantic_match(input, backend: "fast", threshold: 0.7) as score
+    order by score desc
+    limit 10
+  }
+
+  update Knowledge {
+    on_conflict(old, new) {
+      if new.confidence > old.confidence {
+        supersede(old, new)
+      } else {
+        discard(new)
+      }
+    }
+  }
+}
+```
+
+## What It Demonstrates
+
+- Named vector backends (`primary`, `fast`)
+- Named graph backends (`kg`, `social`)
+- `backend:` parameter to target specific backends in queries
+- Score aliases (`as sm`, `as gm`) for weighted ranking formulas

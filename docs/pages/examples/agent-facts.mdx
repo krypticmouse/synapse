@@ -1,0 +1,85 @@
+# Agent Facts
+
+Fact memory with confidence scoring, contradiction resolution, and daily decay.
+
+```mnm
+config {
+  storage: sqlite("./data/agent_facts.db")
+}
+
+memory Fact {
+  content: string
+  source: string
+  confidence: float[0.0,1.0]
+  created_at: timestamp
+  accessed_at: timestamp
+}
+
+on learn(content: string, source: string) {
+  let conf = 0.8
+  if source == "stated" {
+    conf = 1.0
+  }
+
+  store(Fact {
+    content: content,
+    source: source,
+    confidence: conf,
+    created_at: now(),
+    accessed_at: now()
+  })
+}
+
+query GetFacts(limit_n: int): Fact[] {
+  from Fact
+  order by confidence desc
+  limit limit_n
+}
+
+query BySource(source: string): Fact[] {
+  from Fact
+  where source == source
+  order by created_at desc
+}
+
+update Fact {
+  on_access {
+    accessed_at = now()
+  }
+
+  on_conflict(old, new) {
+    if new.confidence > old.confidence {
+      supersede(old, new)
+    } else {
+      discard(new)
+    }
+  }
+
+  every 24h {
+    confidence = confidence * 0.95
+    if confidence < 0.1 {
+      delete()
+    }
+  }
+}
+```
+
+## Usage
+
+```bash
+synapse apply examples/agent_facts.mnm
+
+synapse emit learn '{"content": "User prefers dark mode", "source": "stated"}'
+synapse emit learn '{"content": "User is a Python developer", "source": "inferred"}'
+synapse query GetFacts '{"limit_n": 10}'
+synapse query BySource '{"source": "stated"}'
+```
+
+## What It Demonstrates
+
+- Bounded floats (`float[0.0,1.0]`)
+- Conditional logic in handlers
+- Three types of update rules: `on_access`, `on_conflict`, `every`
+- Confidence decay and automatic deletion
+
+See the [Fact Memory tutorial](/tutorials/fact-memory) for a detailed walkthrough.

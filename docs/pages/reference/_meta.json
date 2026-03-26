@@ -1,0 +1,8 @@
+{
+  "cli": "CLI Commands",
+  "builtins": "Built-in Functions",
+  "http-api": "HTTP API",
+  "backends": "Storage Backends",
+  "connectors": "Channel Connectors",
+  "sdks": "SDKs"
+}

@@ -1,0 +1,154 @@
+# CLI Commands
+
+The `synapse` CLI is the primary way to interact with Synapse memory systems.
+
+## Build
+
+```bash
+cargo build --release -p synapse-cli
+# Binary at ./target/release/synapse
+```
+
+## Commands
+
+### synapse apply
+
+Compile and start the runtime from a `.mnm` file.
+
+```bash
+synapse apply <file.mnm>
+synapse apply <file.mnm> --port 9090
+synapse apply <file.mnm> --daemon
+```
+
+| Flag | Description |
+|------|-------------|
+| `--port`, `-p` | Override the listen port (default: 8080) |
+| `--daemon`, `-d` | Run as a background process |
+
+### synapse check
+
+Validate syntax and types without starting the runtime.
+
+```bash
+synapse check <file.mnm>
+```
+
+Reports memory count, handler count, query count, update rules, policies, extern functions, and channels.
+
+### synapse plan
+
+Show what would be created when applying a file.
+
+```bash
+synapse plan <file.mnm>
+```
+
+### synapse emit
+
+Emit an event to trigger a handler.
+
+```bash
+synapse emit <event_name> '<json_payload>'
+```
+
+Examples:
+
+```bash
+synapse emit save '{"content": "Hello"}'
+synapse emit learn '{"content": "User likes Python", "source": "stated"}'
+synapse emit ingest '{"content": "Raw text to extract facts from"}'
+```
+
+### synapse query
+
+Execute a named query.
+
+```bash
+synapse query <query_name> '<json_params>'
+synapse query <query_name>   # no params (empty object)
+```
+
+Examples:
+
+```bash
+synapse query GetAll
+synapse query Search '{"input": "machine learning"}'
+synapse query GetFacts '{"limit_n": 10}'
+```
+
+### synapse inspect
+
+Show all databases, record counts, and contents.
+
+```bash
+synapse inspect
+synapse inspect --backend sqlite
+synapse inspect --backend qdrant
+synapse inspect --memory Fact
+synapse inspect --compact          # counts only, no records
+```
+
+| Flag | Description |
+|------|-------------|
+| `--backend`, `-b` | Filter by backend: `sqlite`, `qdrant`, `neo4j` |
+| `--memory`, `-m` | Filter by memory type name |
+| `--compact`, `-c` | Show counts only |
+
+### synapse clear
+
+Delete all records from all configured databases.
+
+```bash
+synapse clear
+```
+
+### synapse status
+
+Check if a runtime is running.
+
+```bash
+synapse status
+```
+
+### synapse reload
+
+Hot-reload the `.mnm` source file without restarting the runtime.
+
+```bash
+synapse reload
+```
+
+Re-parses and type-checks the source file, then updates all handler, query, update, and channel definitions in place.
+
+### synapse logs
+
+View runtime logs.
+
+```bash
+synapse logs
+synapse logs --follow
+synapse logs --follow --level debug
+```
+
+| Flag | Description |
+|------|-------------|
+| `--follow`, `-f` | Tail the log output continuously |
+| `--level`, `-l` | Filter by log level: `debug`, `info`, `warn`, `error` |
+
+### synapse init
+
+Scaffold a new Synapse project.
+
+```bash
+synapse init
+```
+
+### synapse destroy
+
+Stop the runtime and optionally delete all data.
+
+```bash
+synapse destroy
+synapse destroy --purge    # also deletes data/ directory
+```

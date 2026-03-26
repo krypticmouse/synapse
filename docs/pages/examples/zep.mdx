@@ -1,0 +1,117 @@
+# Zep (Temporal Knowledge Graph)
+
+A temporal knowledge graph memory system inspired by [Zep](https://www.getzep.com/). Combines episodic memory, semantic facts with temporal validity, entity summaries, and hybrid queries across all three backends.
+
+**Requires:** Docker (for Qdrant and Neo4j)
+
+See the full [Knowledge Graph tutorial](/tutorials/knowledge-graph) for a detailed walkthrough.
+
+```mnm
+config {
+  storage: sqlite("./data/zep.db")
+  vector: auto
+  graph: auto
+  embedding: openai("text-embedding-3-small")
+  extractor: openai("gpt-4o-mini")
+}
+
+namespace zep_agent {
+  memory Episode {
+    session_id: string
+    messages: string[]
+    summary: string?
+    created_at: timestamp
+    @index session_id
+  }
+
+  memory Fact {
+    content: string
+    subject: string
+    predicate: string
+    object: string
+    confidence: float[0,1]
+    valid_from: timestamp
+    valid_until: timestamp?
+    superseded_by: string?
+    @index subject
+    @index predicate
+    @invariant valid_from <= valid_until or valid_until == null
+  }
+
+  memory Entity {
+    name: string
+    entity_type: string
+    summary: string
+    fact_count: int
+    last_updated: timestamp
+    @index name
+    @index entity_type
+  }
+
+  on conversation_end(session_id: string, messages: Message[]) {
+    let episode = Episode {
+      session_id: session_id,
+      messages: messages |> map(m => m.content),
+      summary: messages |> summarize(),
+      created_at: now()
+    }
+    store(episode)
+    messages |> extract() |> store()
+  }
+
+  # Hybrid retrieval: semantic + graph with score aliases
+  query GetContext(input: string): Fact[] {
+    from Fact
+    where semantic_match(input, threshold: 0.6) as sm
+      and graph_match(input, hops: 2) as gm
+      and valid_until == null
+    order by (sm * 0.7 + gm * 0.3) desc
+    limit 10
+  }
+
+  query EntityHistory(entity_name: string): Fact[] {
+    from Fact
+    where subject == entity_name or object == entity_name
+    order by valid_from asc
+  }
+
+  query RelatedEntities(entity: string): Entity[] {
+    from Entity
+    where cypher("
+      MATCH (e:Entity {name: $entity})-[r*1..2]-(related:Entity)
+      RETURN DISTINCT related.name as name
+    ")
+    limit 10
+  }
+
+  update Fact {
+    on_conflict(old, new) {
+      if new.valid_from > old.valid_from {
+        old.valid_until = new.valid_from
+        old.superseded_by = new.id
+        store(new)
+      } else {
+        discard(new)
+      }
+    }
+  }
+
+  update Entity {
+    every 6h {
+      let facts = EntityHistory(name)
+      summary = facts |> summarize()
+      fact_count = facts |> len()
+      last_updated = now()
+    }
+  }
+}
+```
+
+## What It Demonstrates
+
+- Three interconnected memory types
+- Temporal validity with `valid_from`/`valid_until`
+- Hybrid queries with score aliases (`as sm`, `as gm`)
+- Raw Cypher queries for graph traversal
+- Periodic entity summarization from facts
+- Temporal conflict resolution preserving history

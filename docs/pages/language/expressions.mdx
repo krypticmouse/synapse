@@ -1,0 +1,203 @@
+# Expressions and Statements
+
+Synapse has a full expression language for handler bodies, query conditions, update rules, and invariant constraints.
+
+## Literals
+
+```mnm
+42              # int
+3.14            # float
+"hello"         # string (double-quoted)
+'world'         # string (single-quoted)
+true            # bool
+false           # bool
+null            # null
+24h             # duration (24 hours)
+7d              # duration (7 days)
+1w              # duration (1 week)
+30s             # duration (30 seconds)
+5m              # duration (5 minutes)
+```
+
+## Operators
+
+### Arithmetic
+```mnm
+a + b     # addition (also string concatenation)
+a - b     # subtraction
+a * b     # multiplication
+a / b     # division
+a % b     # modulo
+-a        # negation
+```
+
+### Comparison
+```mnm
+a == b    # equal
+a != b    # not equal
+a < b     # less than
+a <= b    # less than or equal
+a > b     # greater than
+a >= b    # greater than or equal
+```
+
+### Logical
+```mnm
+a and b   # logical AND
+a or b    # logical OR
+not a     # logical NOT
+```
+
+## Field Access
+
+```mnm
+record.field          # field access
+record?.field         # optional chain (returns null if record is null)
+array[0]              # index access
+```
+
+## Pipe Operator
+
+The pipe operator `|>` passes the left-hand value as the first argument to the right-hand function:
+
+```mnm
+content |> extract() |> store()
+
+# equivalent to:
+store(extract(content))
+```
+
+Pipes make data flows read linearly instead of being nested inside-out.
+
+### Pipe-Compatible Functions
+
+| Function | Description |
+|----------|-------------|
+| `extract()` | LLM fact extraction |
+| `summarize()` | LLM summarization |
+| `store()` | Persist to all backends |
+| `map(fn)` | Transform each element |
+| `filter(fn)` | Keep matching elements |
+| `each(fn)` | Iterate with side effects |
+| `group_by(field)` | Group array by field |
+| `store_as(Type)` | Store all with a given type name |
+| `delete_originals()` | Delete all records in the array |
+
+## Lambdas
+
+```mnm
+x => x.content                  # single parameter
+(a, b) => a + b                 # multiple parameters
+f => f.confidence > 0.7         # predicate
+```
+
+Lambdas are used with `map`, `filter`, and `each`:
+
+```mnm
+facts
+  |> filter(f => f.confidence > 0.7)
+  |> map(f => f.content)
+```
+
+## Struct Construction
+
+Create a record by specifying the memory type and field values:
+
+```mnm
+Note {
+  content: "hello",
+  created_at: now()
+}
+```
+
+All non-optional fields without defaults must be provided.
+
+## Array Literals
+
+```mnm
+let tags = ["machine-learning", "python", "data-science"]
+let scores = [0.9, 0.85, 0.7]
+```
+
+## Inline Queries
+
+Queries can appear as expressions using `from ... where ... order by ... limit`:
+
+```mnm
+let recent = from Message
+  where session_id == sid
+  order by created_at desc
+  limit 5
+```
+
+## Alias Expressions
+
+The `as` keyword binds a name to a score in query `where` clauses:
+
+```mnm
+where semantic_match(input, threshold: 0.5) as sm
+  and graph_match(input, hops: 2) as gm
+order by sm * 0.6 + gm * 0.4 desc
+```
+
+## Statements
+
+### Variable Binding
+
+```mnm
+let x = 42
+let name = "Alice"
+let facts = content |> extract()
+```
+
+### Assignment
+
+```mnm
+x = x + 1
+record.field = new_value
+confidence = confidence * 0.95
+```
+
+### Conditionals
+
+```mnm
+if confidence > 0.8 {
+  store(fact)
+} else if confidence > 0.5 {
+  fact.needs_review = true
+  store(fact)
+} else {
+  discard(fact)
+}
+```
+
+### Loops
+
+```mnm
+for fact in facts {
+  store(fact)
+}
+
+for msg in messages {
+  if msg.role == "user" {
+    process(msg.content)
+  }
+}
+```
+
+### Return
+
+```mnm
+return value
+return       # returns null
+```
+
+### Bare Expressions
+
+Any expression can be used as a statement. The result is discarded:
+
+```mnm
+store(note)
+emit("ingest", content)
+content |> extract() |> store()
+```

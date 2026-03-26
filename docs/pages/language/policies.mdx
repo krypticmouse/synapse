@@ -1,0 +1,62 @@
+# Policies
+
+Policies are standalone rules not tied to a specific memory type. They use the same rule syntax as `update` blocks but operate at a system-wide level.
+
+## Basic Syntax
+
+```mnm
+policy PolicyName {
+  every duration {
+    # periodic logic
+  }
+}
+```
+
+## Use Cases
+
+### Scheduled Connector Syncs
+
+```mnm
+policy ConnectorRefresh {
+  every 1h {
+    from ConnectorState
+    where last_sync < now() - 1h
+    |> each(state => emit("connector_sync", state.connector_type, state.user_id))
+  }
+}
+```
+
+### Cleanup Old Data
+
+```mnm
+policy DataRetention {
+  every 1d {
+    from Message
+    where created_at < now() - 90d
+    |> each(msg => delete(msg))
+  }
+}
+```
+
+### Periodic Summarization
+
+```mnm
+policy WeeklySummary {
+  every 7d {
+    from ConversationMessage
+    where timestamp < now() - 30d
+    |> group_by(session_id)
+    |> summarize()
+    |> store_as(ArchivalEntry)
+    |> delete_originals()
+  }
+}
+```
+
+## Policies vs Update Rules
+
+| Feature | `update MemoryType { every ... }` | `policy Name { every ... }` |
+|---------|-----------------------------------|-----------------------------|
+| Scope | Runs for each record of the memory type | Runs once, system-wide |
+| Field access | Direct access to record fields | Must query explicitly |
+| Best for | Per-record maintenance (decay, archival) | Cross-type operations, scheduled tasks |

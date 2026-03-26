@@ -1,0 +1,73 @@
+# Conversation Memory
+
+Tiered conversation storage with session management and archival.
+
+```mnm
+config {
+  storage: sqlite("./data/conversation.db")
+}
+
+namespace chat {
+  memory Message {
+    role: string
+    content: string
+    session_id: string
+    created_at: timestamp
+  }
+
+  memory SessionSummary {
+    session_id: string
+    summary: string
+    message_count: int
+    created_at: timestamp
+  }
+
+  on message(role: string, content: string, session_id: string) {
+    store(Message {
+      role: role,
+      content: content,
+      session_id: session_id,
+      created_at: now()
+    })
+  }
+
+  on archive_session(session_id: string, summary: string) {
+    store(SessionSummary {
+      session_id: session_id,
+      summary: summary,
+      message_count: 0,
+      created_at: now()
+    })
+  }
+
+  query RecentMessages(session_id: string): Message[] {
+    from Message
+    where session_id == session_id
+    order by created_at desc
+    limit 50
+  }
+
+  query GetSummaries(): SessionSummary[] {
+    from SessionSummary
+    order by created_at desc
+  }
+}
+```
+
+## Usage
+
+```bash
+synapse apply examples/conversation.mnm
+
+synapse emit message '{"role": "user", "content": "What is Rust?", "session_id": "sess_1"}'
+synapse emit message '{"role": "assistant", "content": "Rust is a systems language.", "session_id": "sess_1"}'
+synapse query RecentMessages '{"session_id": "sess_1"}'
+synapse emit archive_session '{"session_id": "sess_1", "summary": "Discussed Rust"}'
+```
+
+## What It Demonstrates
+
+- Namespaces
+- Multiple memory types
+- Session-based filtering in queries
+- Event-driven archival

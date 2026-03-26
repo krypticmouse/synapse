@@ -1,0 +1,207 @@
+# Getting Started
+
+This guide walks you through installing Synapse, writing your first `.mnm` file, and interacting with a running memory system.
+
+## Prerequisites
+
+You need [Rust](https://rustup.rs/) (1.70+) installed. For vector and graph backends, you also need [Docker](https://docs.docker.com/get-docker/).
+
+For LLM features (`extract()`, `summarize()`, `semantic_match()`), set your OpenAI API key:
+
+```bash
+export OPENAI_API_KEY="sk-..."
+```
+
+## Installation
+
+Clone the repository and build the CLI:
+
+```bash
+git clone https://github.com/krypticmouse/synapse.git
+cd synapse
+cargo build --release -p synapse-cli
+```
+
+The binary is at `./target/release/synapse`. Add it to your PATH or use it directly.
+
+## Your First Memory System
+
+Create a file called `notes.mnm`:
+
+```mnm
+config {
+  storage: sqlite("./data/notes.db")
+}
+
+memory Note {
+  content: string
+  created_at: timestamp
+}
+
+on save(content: string) {
+  store(Note {
+    content: content,
+    created_at: now()
+  })
+}
+
+query GetAll(): Note[] {
+  from Note
+  order by created_at desc
+}
+```
+
+This defines a simple note-taking system with a `save` event handler and a `GetAll` query.
+
+## Running It
+
+Start the runtime:
+
+```bash
+./target/release/synapse apply notes.mnm
+```
+
+You should see:
+
+```
+Applying notes.mnm...
+  ✓ Compiled successfully
+  ✓ Connected to sqlite (./data/notes.db)
+  ✓ Runtime listening on localhost:8080
+
+  Press Ctrl+C to stop.
+```
+
+## Storing Data
+
+In a separate terminal, emit an event:
+
+```bash
+./target/release/synapse emit save '{"content": "Remember to buy milk"}'
+```
+
+The response confirms the event was processed:
+
+```json
+{"success": true, "event": "save", "stored": 1}
+```
+
+## Querying Data
+
+```bash
+./target/release/synapse query GetAll
+```
+
+Returns your stored notes as JSON.
+
+## Validate Without Running
+
+Use `check` to validate syntax and types without starting the runtime:
+
+```bash
+./target/release/synapse check notes.mnm
+```
+
+```
+Checking notes.mnm...
+  ✓ Syntax valid
+  ✓ Types valid
+  ✓ 1 memories, 1 handlers, 1 queries, 0 update rules, 0 policies, 0 extern fns, 0 channels
+```
+
+## Preview the Execution Plan
+
+```bash
+./target/release/synapse plan notes.mnm
+```
+
+```
+Planning changes for notes.mnm...
+
+Memories:
+  + Note (new, 2 fields)
+  + on save (new handler)
+  + query GetAll (new)
+
+No existing state found. All items will be created.
+```
+
+## Using the HTTP API
+
+The runtime exposes a REST API. You can also interact with it directly:
+
+```bash
+# Store via HTTP
+curl -X POST http://localhost:8080/emit \
+  -H "Content-Type: application/json" \
+  -d '{"event": "save", "payload": {"content": "Hello via HTTP"}}'
+
+# Query via HTTP
+curl -X POST http://localhost:8080/query \
+  -H "Content-Type: application/json" \
+  -d '{"query": "GetAll", "params": {}}'
+```
+
+## Adding Vector Search
+
+To enable semantic search, add a vector backend and an embedding model:
+
+```mnm
+config {
+  storage: sqlite("./data/notes.db")
+  vector: auto("qdrant")
+  embedding: openai("text-embedding-3-small")
+}
+
+memory Note {
+  content: string
+  created_at: timestamp
+}
+
+on save(content: string) {
+  store(Note {
+    content: content,
+    created_at: now()
+  })
+}
+
+query Search(input: string): Note[] {
+  from Note
+  where semantic_match(input, threshold: 0.6)
+  order by _score desc
+  limit 10
+}
+
+query GetAll(): Note[] {
+  from Note
+  order by created_at desc
+}
+```
+
+The `auto("qdrant")` directive auto-spawns a Qdrant container via Docker. Now you can do semantic search:
+
+```bash
+./target/release/synapse query Search '{"input": "groceries"}'
+```
+
+## Cleanup
+
+```bash
+# Stop the runtime
+Ctrl+C
+
+# Or destroy it (removes state files)
+./target/release/synapse destroy
+
+# Destroy and delete all data
+./target/release/synapse destroy --purge
+```
+
+## Next Steps
+
+Now that you have a running system, explore:
+
+- [Language Guide](/language/overview) for a complete tour of the `.mnm` language
+- [Tutorials](/tutorials/hello-world) for step-by-step walkthroughs
+- [Examples](/examples/hello) for annotated real-world configurations
+- [CLI Reference](/reference/cli) for all available commands

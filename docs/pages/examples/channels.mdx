@@ -1,0 +1,112 @@
+# Channel Ingestion
+
+Multi-channel ingestion from Slack, Discord, Telegram, and webhooks with shared update rules.
+
+See the full [Channel Ingestion tutorial](/tutorials/channel-ingestion) for a detailed walkthrough.
+
+```mnm
+config {
+  storage: sqlite("./data/channels.db")
+  vector: auto("qdrant")
+  graph: auto("neo4j")
+  embedding: openai("text-embedding-3-small")
+  extractor: openai("gpt-4o-mini")
+}
+
+namespace team_memory {
+  memory Message {
+    content: string
+    author: string
+    source: string
+    subject: string
+    predicate: string
+    object: string
+    confidence: float[0,1]
+    created_at: timestamp
+    @index source
+    @index author
+    @index subject
+  }
+
+  channel slack_feed {
+    source: slack
+    config { token: env("SLACK_TOKEN") }
+    poll_interval: 5m
+
+    on message -> ingest(content: string, author: string) {
+      content |> extract() |> store()
+    }
+
+    on edit -> update(content: string, message_id: string) {
+      content |> extract() |> store()
+    }
+  }
+
+  channel discord_feed {
+    source: discord
+    config { token: env("DISCORD_TOKEN") }
+    poll_interval: 5m
+
+    on message -> ingest(content: string, author: string) {
+      content |> extract() |> store()
+    }
+  }
+
+  channel telegram_feed {
+    source: telegram
+    config { token: env("TELEGRAM_BOT_TOKEN") }
+    poll_interval: 1m
+
+    on message -> ingest(content: string, author: string) {
+      content |> extract() |> store()
+    }
+  }
+
+  channel webhook_feed {
+    source: webhook
+    config { endpoint: env("WEBHOOK_URL") }
+    poll_interval: 30s
+
+    on message -> ingest(content: string) {
+      content |> extract() |> store()
+    }
+  }
+
+  on ingest(content: string) {
+    content |> extract() |> store()
+  }
+
+  query Search(input: string): Message[] {
+    from Message
+    where semantic_match(input, threshold: 0.5)
+    order by created_at desc
+    limit 20
+  }
+
+  query BySource(source: string): Message[] {
+    from Message
+    where source == source
+    order by created_at desc
+    limit 50
+  }
+
+  update Message {
+    on_conflict(old, new) {
+      if new.confidence > old.confidence {
+        supersede(old, new)
+      } else {
+        discard(new)
+      }
+    }
+  }
+}
+```
+
+## What It Demonstrates
+
+- Four channels: Slack, Discord, Telegram, Webhook
+- `env()` for secure credential handling
+- `-> ingest` and `-> update` routing
+- Different `poll_interval` per channel
+- Shared ingest handler and update rules across all channels
+- All 40 supported connectors listed in the [Connectors reference](/reference/connectors)
