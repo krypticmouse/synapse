@@ -2506,6 +2506,7 @@ dependencies = [
  "neo4rs",
  "qdrant-client",
  "regex",
+ "reqwest",
  "rig-core",
  "rusqlite",
  "serde",

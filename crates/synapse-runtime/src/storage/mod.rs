@@ -1,7 +1,14 @@
+pub mod arangodb;
+pub mod chromadb;
+pub mod memgraph;
 pub mod neo4j;
+pub mod pinecone;
 pub mod qdrant;
 pub mod sqlite;
+pub mod surrealdb;
+pub mod weaviate;
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::llm::EmbeddingClient;
@@ -22,44 +29,45 @@ pub enum StorageError {
 
 pub type StorageResult<T> = std::result::Result<T, StorageError>;
 
-/// Enum dispatch over storage backends — no dyn, no Box.
+/// Enum dispatch over relational storage backends.
 #[derive(Debug)]
 pub enum StorageBackend {
     Sqlite(sqlite::SqliteBackend),
-    Qdrant(qdrant::QdrantBackend),
-    Neo4j(neo4j::Neo4jBackend),
-}
-
-/// Macro to dispatch method calls across all storage backend variants.
-macro_rules! dispatch {
-    ($self:expr, $method:ident ( $($arg:expr),* )) => {
-        match $self {
-            StorageBackend::Sqlite(s) => s.$method($($arg),*).await,
-            StorageBackend::Qdrant(s) => s.$method($($arg),*).await,
-            StorageBackend::Neo4j(s) => s.$method($($arg),*).await,
-        }
-    };
 }
 
 impl StorageBackend {
     pub async fn store(&self, record: &Record) -> StorageResult<()> {
-        dispatch!(self, store(record))
+        match self {
+            StorageBackend::Sqlite(s) => s.store(record).await,
+        }
     }
 
     pub async fn get(&self, type_name: &str, id: &str) -> StorageResult<Option<Record>> {
-        dispatch!(self, get(type_name, id))
+        match self {
+            StorageBackend::Sqlite(s) => s.get(type_name, id).await,
+        }
     }
 
-    pub async fn query(&self, type_name: &str, filter: &QueryFilter) -> StorageResult<Vec<Record>> {
-        dispatch!(self, query(type_name, filter))
+    pub async fn query(
+        &self,
+        type_name: &str,
+        filter: &QueryFilter,
+    ) -> StorageResult<Vec<Record>> {
+        match self {
+            StorageBackend::Sqlite(s) => s.query(type_name, filter).await,
+        }
     }
 
     pub async fn update(&self, record: &Record) -> StorageResult<()> {
-        dispatch!(self, update(record))
+        match self {
+            StorageBackend::Sqlite(s) => s.update(record).await,
+        }
     }
 
     pub async fn delete(&self, type_name: &str, id: &str) -> StorageResult<()> {
-        dispatch!(self, delete(type_name, id))
+        match self {
+            StorageBackend::Sqlite(s) => s.delete(type_name, id).await,
+        }
     }
 
     pub async fn ensure_table(
@@ -68,26 +76,278 @@ impl StorageBackend {
         fields: &[(String, String)],
         indexes: &[String],
     ) -> StorageResult<()> {
-        dispatch!(self, ensure_table(type_name, fields, indexes))
+        match self {
+            StorageBackend::Sqlite(s) => s.ensure_table(type_name, fields, indexes).await,
+        }
     }
 }
 
-/// Filter for querying records — used by the query executor.
+// ═══════════════════════════════════════════════════════════════
+// VECTOR BACKEND
+// ═══════════════════════════════════════════════════════════════
+
+#[derive(Debug)]
+pub enum VectorBackendKind {
+    Qdrant(qdrant::QdrantBackend),
+    Pinecone(pinecone::PineconeBackend),
+    Weaviate(weaviate::WeaviateBackend),
+    ChromaDB(chromadb::ChromaDBBackend),
+}
+
+impl VectorBackendKind {
+    pub async fn store(&self, record: &Record) -> StorageResult<()> {
+        match self {
+            VectorBackendKind::Qdrant(s) => s.store(record).await,
+            VectorBackendKind::Pinecone(s) => s.store(record).await,
+            VectorBackendKind::Weaviate(s) => s.store(record).await,
+            VectorBackendKind::ChromaDB(s) => s.store(record).await,
+        }
+    }
+
+    pub async fn search_by_vector(
+        &self,
+        type_name: &str,
+        vector: Vec<f32>,
+        limit: usize,
+        threshold: f64,
+    ) -> StorageResult<Vec<(String, f32)>> {
+        match self {
+            VectorBackendKind::Qdrant(s) => {
+                s.search_by_vector(type_name, vector, limit, threshold)
+                    .await
+            }
+            VectorBackendKind::Pinecone(s) => {
+                s.search_by_vector(type_name, vector, limit, threshold)
+                    .await
+            }
+            VectorBackendKind::Weaviate(s) => {
+                s.search_by_vector(type_name, vector, limit, threshold)
+                    .await
+            }
+            VectorBackendKind::ChromaDB(s) => {
+                s.search_by_vector(type_name, vector, limit, threshold)
+                    .await
+            }
+        }
+    }
+
+    pub async fn get(&self, type_name: &str, id: &str) -> StorageResult<Option<Record>> {
+        match self {
+            VectorBackendKind::Qdrant(s) => s.get(type_name, id).await,
+            VectorBackendKind::Pinecone(s) => s.get(type_name, id).await,
+            VectorBackendKind::Weaviate(s) => s.get(type_name, id).await,
+            VectorBackendKind::ChromaDB(s) => s.get(type_name, id).await,
+        }
+    }
+
+    pub async fn query(
+        &self,
+        type_name: &str,
+        filter: &QueryFilter,
+    ) -> StorageResult<Vec<Record>> {
+        match self {
+            VectorBackendKind::Qdrant(s) => s.query(type_name, filter).await,
+            VectorBackendKind::Pinecone(s) => s.query(type_name, filter).await,
+            VectorBackendKind::Weaviate(s) => s.query(type_name, filter).await,
+            VectorBackendKind::ChromaDB(s) => s.query(type_name, filter).await,
+        }
+    }
+
+    pub async fn delete(&self, type_name: &str, id: &str) -> StorageResult<()> {
+        match self {
+            VectorBackendKind::Qdrant(s) => s.delete(type_name, id).await,
+            VectorBackendKind::Pinecone(s) => s.delete(type_name, id).await,
+            VectorBackendKind::Weaviate(s) => s.delete(type_name, id).await,
+            VectorBackendKind::ChromaDB(s) => s.delete(type_name, id).await,
+        }
+    }
+
+    pub async fn clear(&self, type_name: &str) -> StorageResult<()> {
+        match self {
+            VectorBackendKind::Qdrant(s) => s.clear(type_name).await,
+            VectorBackendKind::Pinecone(s) => s.clear(type_name).await,
+            VectorBackendKind::Weaviate(s) => s.clear(type_name).await,
+            VectorBackendKind::ChromaDB(s) => s.clear(type_name).await,
+        }
+    }
+
+    pub async fn ensure_table(
+        &self,
+        type_name: &str,
+        fields: &[(String, String)],
+        indexes: &[String],
+    ) -> StorageResult<()> {
+        match self {
+            VectorBackendKind::Qdrant(s) => s.ensure_table(type_name, fields, indexes).await,
+            VectorBackendKind::Pinecone(s) => s.ensure_table(type_name, fields, indexes).await,
+            VectorBackendKind::Weaviate(s) => s.ensure_table(type_name, fields, indexes).await,
+            VectorBackendKind::ChromaDB(s) => s.ensure_table(type_name, fields, indexes).await,
+        }
+    }
+
+    pub fn set_embedder(&mut self, embedder: Arc<EmbeddingClient>) {
+        match self {
+            VectorBackendKind::Qdrant(s) => s.set_embedder(embedder),
+            VectorBackendKind::Pinecone(s) => s.set_embedder(embedder),
+            VectorBackendKind::Weaviate(s) => s.set_embedder(embedder),
+            VectorBackendKind::ChromaDB(s) => s.set_embedder(embedder),
+        }
+    }
+
+    pub fn url(&self) -> &str {
+        match self {
+            VectorBackendKind::Qdrant(s) => s.url(),
+            VectorBackendKind::Pinecone(s) => s.url(),
+            VectorBackendKind::Weaviate(s) => s.url(),
+            VectorBackendKind::ChromaDB(s) => s.url(),
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// GRAPH BACKEND
+// ═══════════════════════════════════════════════════════════════
+
+#[derive(Debug)]
+pub enum GraphBackendKind {
+    Neo4j(neo4j::Neo4jBackend),
+    Memgraph(memgraph::MemgraphBackend),
+    ArangoDB(arangodb::ArangoDBBackend),
+    SurrealDB(surrealdb::SurrealDBBackend),
+}
+
+impl GraphBackendKind {
+    pub async fn store(&self, record: &Record) -> StorageResult<()> {
+        match self {
+            GraphBackendKind::Neo4j(s) => s.store(record).await,
+            GraphBackendKind::Memgraph(s) => s.store(record).await,
+            GraphBackendKind::ArangoDB(s) => s.store(record).await,
+            GraphBackendKind::SurrealDB(s) => s.store(record).await,
+        }
+    }
+
+    pub async fn store_triple(&self, record: &Record) -> StorageResult<()> {
+        match self {
+            GraphBackendKind::Neo4j(s) => s.store_triple(record).await,
+            GraphBackendKind::Memgraph(s) => s.store_triple(record).await,
+            GraphBackendKind::ArangoDB(s) => s.store_triple(record).await,
+            GraphBackendKind::SurrealDB(s) => s.store_triple(record).await,
+        }
+    }
+
+    pub async fn graph_match_ids(
+        &self,
+        type_name: &str,
+        input: &str,
+        hops: usize,
+    ) -> StorageResult<std::collections::HashSet<String>> {
+        match self {
+            GraphBackendKind::Neo4j(s) => s.graph_match_ids(type_name, input, hops).await,
+            GraphBackendKind::Memgraph(s) => s.graph_match_ids(type_name, input, hops).await,
+            GraphBackendKind::ArangoDB(s) => s.graph_match_ids(type_name, input, hops).await,
+            GraphBackendKind::SurrealDB(s) => s.graph_match_ids(type_name, input, hops).await,
+        }
+    }
+
+    pub async fn cypher_query_ids(
+        &self,
+        query: &str,
+        params: &std::collections::HashMap<String, String>,
+    ) -> StorageResult<std::collections::HashSet<String>> {
+        match self {
+            GraphBackendKind::Neo4j(s) => s.cypher_query_ids(query, params).await,
+            GraphBackendKind::Memgraph(s) => s.cypher_query_ids(query, params).await,
+            GraphBackendKind::ArangoDB(s) => s.cypher_query_ids(query, params).await,
+            GraphBackendKind::SurrealDB(s) => s.cypher_query_ids(query, params).await,
+        }
+    }
+
+    pub async fn get(&self, type_name: &str, id: &str) -> StorageResult<Option<Record>> {
+        match self {
+            GraphBackendKind::Neo4j(s) => s.get(type_name, id).await,
+            GraphBackendKind::Memgraph(s) => s.get(type_name, id).await,
+            GraphBackendKind::ArangoDB(s) => s.get(type_name, id).await,
+            GraphBackendKind::SurrealDB(s) => s.get(type_name, id).await,
+        }
+    }
+
+    pub async fn query(
+        &self,
+        type_name: &str,
+        filter: &QueryFilter,
+    ) -> StorageResult<Vec<Record>> {
+        match self {
+            GraphBackendKind::Neo4j(s) => s.query(type_name, filter).await,
+            GraphBackendKind::Memgraph(s) => s.query(type_name, filter).await,
+            GraphBackendKind::ArangoDB(s) => s.query(type_name, filter).await,
+            GraphBackendKind::SurrealDB(s) => s.query(type_name, filter).await,
+        }
+    }
+
+    pub async fn delete(&self, type_name: &str, id: &str) -> StorageResult<()> {
+        match self {
+            GraphBackendKind::Neo4j(s) => s.delete(type_name, id).await,
+            GraphBackendKind::Memgraph(s) => s.delete(type_name, id).await,
+            GraphBackendKind::ArangoDB(s) => s.delete(type_name, id).await,
+            GraphBackendKind::SurrealDB(s) => s.delete(type_name, id).await,
+        }
+    }
+
+    pub async fn clear(&self, type_name: &str) -> StorageResult<()> {
+        match self {
+            GraphBackendKind::Neo4j(s) => s.clear(type_name).await,
+            GraphBackendKind::Memgraph(s) => s.clear(type_name).await,
+            GraphBackendKind::ArangoDB(s) => s.clear(type_name).await,
+            GraphBackendKind::SurrealDB(s) => s.clear(type_name).await,
+        }
+    }
+
+    pub async fn ensure_table(
+        &self,
+        type_name: &str,
+        fields: &[(String, String)],
+        indexes: &[String],
+    ) -> StorageResult<()> {
+        match self {
+            GraphBackendKind::Neo4j(s) => s.ensure_table(type_name, fields, indexes).await,
+            GraphBackendKind::Memgraph(s) => s.ensure_table(type_name, fields, indexes).await,
+            GraphBackendKind::ArangoDB(s) => s.ensure_table(type_name, fields, indexes).await,
+            GraphBackendKind::SurrealDB(s) => s.ensure_table(type_name, fields, indexes).await,
+        }
+    }
+
+    pub fn url(&self) -> &str {
+        match self {
+            GraphBackendKind::Neo4j(s) => s.url(),
+            GraphBackendKind::Memgraph(s) => s.url(),
+            GraphBackendKind::ArangoDB(s) => s.url(),
+            GraphBackendKind::SurrealDB(s) => s.url(),
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// QUERY FILTER
+// ═══════════════════════════════════════════════════════════════
+
 #[derive(Debug, Clone, Default)]
 pub struct QueryFilter {
     pub conditions: Vec<Condition>,
-    /// Conditions joined by OR (at least one must match).
     pub or_conditions: Vec<Condition>,
-    pub order_by: Option<(String, bool)>, // (field, ascending)
+    pub order_by: Option<(String, bool)>,
     pub limit: Option<usize>,
     pub graph_match: Option<GraphMatch>,
     pub cypher_query: Option<CypherQuery>,
     pub semantic_match: Option<SemanticMatch>,
-    /// Regex filters applied after DB query: (field_name, regex)
     #[allow(clippy::type_complexity)]
     pub regex_filters: Vec<(String, regex::Regex)>,
-    /// Raw SQL query to run instead of the normal table query
     pub raw_sql: Option<String>,
+    /// Target vector backend name for semantic_match (None = use first/default)
+    pub vector_backend: Option<String>,
+    /// Target graph backend name for graph_match/cypher (None = use first/default)
+    pub graph_backend: Option<String>,
+    /// Score aliases: alias_name -> scoring function type ("semantic" or "graph")
+    pub score_aliases: HashMap<String, String>,
 }
 
 #[derive(Debug, Clone)]
@@ -107,33 +367,33 @@ pub enum ConditionOp {
     Ge,
 }
 
-/// Graph traversal filter: find records connected within N hops of the input.
 #[derive(Debug, Clone)]
 pub struct GraphMatch {
     pub input: String,
     pub hops: usize,
 }
 
-/// Raw Cypher query to execute against the graph backend.
 #[derive(Debug, Clone)]
 pub struct CypherQuery {
     pub query: String,
     pub params: std::collections::HashMap<String, String>,
 }
 
-/// Semantic similarity search via vector embeddings.
 #[derive(Debug, Clone)]
 pub struct SemanticMatch {
     pub input: String,
     pub threshold: f64,
 }
 
-/// Combined storage manager — holds all active backends.
+// ═══════════════════════════════════════════════════════════════
+// STORAGE MANAGER (multi-backend)
+// ═══════════════════════════════════════════════════════════════
+
 #[derive(Debug)]
 pub struct StorageManager {
     pub relational: Option<StorageBackend>,
-    pub vector: Option<StorageBackend>,
-    pub graph: Option<StorageBackend>,
+    pub vectors: HashMap<String, VectorBackendKind>,
+    pub graphs: HashMap<String, GraphBackendKind>,
     pub embedder: Option<Arc<EmbeddingClient>>,
 }
 
@@ -141,16 +401,28 @@ impl StorageManager {
     pub fn new() -> Self {
         Self {
             relational: None,
-            vector: None,
-            graph: None,
+            vectors: HashMap::new(),
+            graphs: HashMap::new(),
             embedder: None,
         }
     }
 
-    /// Store a record across all configured backends.
-    /// SQLite gets all records. Qdrant gets records for embedding.
-    /// Neo4j gets the node and, if the record has subject/predicate/object
-    /// fields, also creates a relationship triple.
+    /// Get the first (or named) vector backend
+    pub fn vector(&self, name: Option<&str>) -> Option<&VectorBackendKind> {
+        match name {
+            Some(n) => self.vectors.get(n),
+            None => self.vectors.get("default").or_else(|| self.vectors.values().next()),
+        }
+    }
+
+    /// Get the first (or named) graph backend
+    pub fn graph(&self, name: Option<&str>) -> Option<&GraphBackendKind> {
+        match name {
+            Some(n) => self.graphs.get(n),
+            None => self.graphs.get("default").or_else(|| self.graphs.values().next()),
+        }
+    }
+
     pub async fn store(&self, record: &Record) -> StorageResult<()> {
         tracing::debug!(
             type_name = %record.type_name, id = %record.id,
@@ -159,34 +431,28 @@ impl StorageManager {
         );
         if let Some(ref r) = self.relational {
             r.store(record).await.map_err(|e| {
-                tracing::error!(error = %e, type_name = %record.type_name, "SQLite store failed");
+                tracing::error!(error = %e, type_name = %record.type_name, "relational store failed");
                 e
             })?;
-            tracing::debug!(type_name = %record.type_name, "stored to SQLite");
         }
-        if let Some(ref v) = self.vector {
-            v.store(record).await.map_err(|e| {
-                tracing::error!(error = %e, type_name = %record.type_name, "Qdrant store failed");
-                e
-            })?;
-            tracing::debug!(type_name = %record.type_name, "stored to Qdrant");
+        // Store to ALL vector backends
+        for (name, v) in &self.vectors {
+            if let Err(e) = v.store(record).await {
+                tracing::error!(error = %e, backend = %name, type_name = %record.type_name, "vector store failed");
+            }
         }
-        if let Some(StorageBackend::Neo4j(ref neo)) = self.graph {
-            neo.store(record).await.map_err(|e| {
-                tracing::error!(error = %e, type_name = %record.type_name, "Neo4j store failed");
-                e
-            })?;
-            neo.store_triple(record).await.map_err(|e| {
-                tracing::error!(error = %e, type_name = %record.type_name, "Neo4j store_triple failed");
-                e
-            })?;
-            tracing::debug!(type_name = %record.type_name, "stored to Neo4j");
+        // Store to ALL graph backends (node + triples)
+        for (name, g) in &self.graphs {
+            if let Err(e) = g.store(record).await {
+                tracing::error!(error = %e, backend = %name, type_name = %record.type_name, "graph store failed");
+            }
+            if let Err(e) = g.store_triple(record).await {
+                tracing::error!(error = %e, backend = %name, type_name = %record.type_name, "graph store_triple failed");
+            }
         }
         Ok(())
     }
 
-    /// Fetch full records by IDs from graph or vector backends (fallback
-    /// when the relational backend has no data for the queried type).
     async fn fetch_records_by_ids(
         &self,
         type_name: &str,
@@ -195,9 +461,7 @@ impl StorageManager {
     ) -> StorageResult<Vec<Record>> {
         let mut results = Vec::new();
 
-        // Try graph backend first (it stores richer record data).
-        // Match by _id or by name field (for Cypher queries that return names).
-        if let Some(ref g) = self.graph {
+        for g in self.graphs.values() {
             let all = g.query(type_name, &QueryFilter::default()).await?;
             for r in all {
                 let id_match = ids.contains(&r.id);
@@ -211,11 +475,13 @@ impl StorageManager {
                     results.push(r);
                 }
             }
+            if !results.is_empty() {
+                break;
+            }
         }
 
-        // If graph didn't have them, try vector backend
         if results.is_empty() {
-            if let Some(ref v) = self.vector {
+            for v in self.vectors.values() {
                 let all = v.query(type_name, &QueryFilter::default()).await?;
                 for r in all {
                     let id_match = ids.contains(&r.id);
@@ -229,10 +495,12 @@ impl StorageManager {
                         results.push(r);
                     }
                 }
+                if !results.is_empty() {
+                    break;
+                }
             }
         }
 
-        // Apply remaining filter conditions in memory
         for c in &filter.conditions {
             results.retain(|r| {
                 let field_val = r.fields.get(&c.field).unwrap_or(&Value::Null);
@@ -244,7 +512,6 @@ impl StorageManager {
             });
         }
 
-        // Apply ordering
         if let Some((ref field, asc)) = filter.order_by {
             results.sort_by(|a, b| {
                 let va = a.fields.get(field);
@@ -257,29 +524,17 @@ impl StorageManager {
                     (Some(Value::String(sa)), Some(Value::String(sb))) => sa.cmp(sb),
                     _ => std::cmp::Ordering::Equal,
                 };
-                if asc {
-                    ord
-                } else {
-                    ord.reverse()
-                }
+                if asc { ord } else { ord.reverse() }
             });
         }
 
-        // Apply limit
         if let Some(limit) = filter.limit {
             results.truncate(limit);
         }
 
-        tracing::debug!(
-            count = results.len(),
-            "fetched {} records from alternate backends",
-            results.len()
-        );
         Ok(results)
     }
 
-    /// Fallback: fetch all records of a type from graph/vector and apply
-    /// filter conditions in memory. Used when relational backend is empty.
     async fn fallback_query_all(
         &self,
         type_name: &str,
@@ -287,12 +542,18 @@ impl StorageManager {
     ) -> StorageResult<Vec<Record>> {
         let mut results = Vec::new();
 
-        if let Some(ref g) = self.graph {
+        for g in self.graphs.values() {
             results = g.query(type_name, &QueryFilter::default()).await?;
+            if !results.is_empty() {
+                break;
+            }
         }
         if results.is_empty() {
-            if let Some(ref v) = self.vector {
+            for v in self.vectors.values() {
                 results = v.query(type_name, &QueryFilter::default()).await?;
+                if !results.is_empty() {
+                    break;
+                }
             }
         }
 
@@ -332,11 +593,7 @@ impl StorageManager {
                     }
                     _ => std::cmp::Ordering::Equal,
                 };
-                if asc {
-                    ord
-                } else {
-                    ord.reverse()
-                }
+                if asc { ord } else { ord.reverse() }
             });
         }
 
@@ -344,44 +601,36 @@ impl StorageManager {
             results.truncate(limit);
         }
 
-        tracing::debug!(
-            count = results.len(),
-            "fallback_query_all returned {} records",
-            results.len()
-        );
         Ok(results)
     }
 
     /// Query with multi-backend support.
-    ///
-    /// Strategy: gather candidate IDs from graph and semantic backends,
-    /// then try to fetch matching records from the relational backend.
-    /// If relational is empty/unavailable, fall back to fetching records
-    /// directly from whichever backend has them (graph or vector).
-    pub async fn query(&self, type_name: &str, filter: &QueryFilter) -> StorageResult<Vec<Record>> {
-        // If ordering by _score (virtual field), strip it from the filter
-        // so backends don't choke, and apply it in memory after scoring.
-        let score_order = match &filter.order_by {
-            Some((field, asc)) if field == "_score" => Some(*asc),
-            _ => None,
-        };
+    /// Returns (results, score_maps) where score_maps maps alias names to per-record scores.
+    pub async fn query_with_scores(
+        &self,
+        type_name: &str,
+        filter: &QueryFilter,
+    ) -> StorageResult<(Vec<Record>, HashMap<String, HashMap<String, f64>>)> {
+        let mut alias_scores: HashMap<String, HashMap<String, f64>> = HashMap::new();
 
         let has_candidate_backends = filter.graph_match.is_some()
             || filter.semantic_match.is_some()
             || filter.cypher_query.is_some();
 
-        // When graph/semantic backends will produce candidate IDs, defer limit
-        // to after filtering + scoring so the relational backend doesn't
-        // prematurely truncate results.
         let deferred_limit = if has_candidate_backends {
             filter.limit
         } else {
             None
         };
 
-        let filter = if score_order.is_some() || has_candidate_backends {
+        // Strip virtual _score or alias-based ordering from backend filters
+        let is_virtual_order = filter.order_by.as_ref().map_or(false, |(field, _)| {
+            field == "_score" || filter.score_aliases.contains_key(field)
+        });
+
+        let filter = if is_virtual_order || has_candidate_backends {
             &QueryFilter {
-                order_by: if score_order.is_some() {
+                order_by: if is_virtual_order {
                     None
                 } else {
                     filter.order_by.clone()
@@ -399,14 +648,24 @@ impl StorageManager {
 
         let mut graph_ids: Option<std::collections::HashSet<String>> = None;
 
-        if let Some(StorageBackend::Neo4j(ref neo)) = self.graph {
+        // Use targeted or first graph backend
+        let graph_backend = self.graph(filter.graph_backend.as_deref());
+        if let Some(gb) = graph_backend {
             if let Some(ref gm) = filter.graph_match {
-                let ids = neo.graph_match_ids(type_name, &gm.input, gm.hops).await?;
-                tracing::debug!(count = ids.len(), input = %gm.input, "graph_match returned IDs: {:?}", ids);
+                let ids = gb.graph_match_ids(type_name, &gm.input, gm.hops).await?;
+                // If there's a graph alias, record a score of 1.0 for matched IDs
+                for (alias, kind) in &filter.score_aliases {
+                    if kind == "graph" {
+                        let scores = alias_scores.entry(alias.clone()).or_default();
+                        for id in &ids {
+                            scores.insert(id.clone(), 1.0);
+                        }
+                    }
+                }
                 graph_ids = Some(ids);
             }
             if let Some(ref cq) = filter.cypher_query {
-                let ids = neo.cypher_query_ids(&cq.query, &cq.params).await?;
+                let ids = gb.cypher_query_ids(&cq.query, &cq.params).await?;
                 match graph_ids {
                     Some(ref mut existing) => existing.retain(|id| ids.contains(id)),
                     None => graph_ids = Some(ids),
@@ -417,18 +676,19 @@ impl StorageManager {
         let mut semantic_ids: Option<std::collections::HashSet<String>> = None;
         let mut semantic_scores: std::collections::HashMap<String, f32> =
             std::collections::HashMap::new();
-        if let Some(StorageBackend::Qdrant(ref qdrant)) = self.vector {
+
+        let vector_backend = self.vector(filter.vector_backend.as_deref());
+        if let Some(vb) = vector_backend {
             if let Some(ref sm) = filter.semantic_match {
                 if let Some(ref embedder) = self.embedder {
                     match embedder.embed(&sm.input).await {
                         Ok(vector) => {
                             let limit = filter.limit.unwrap_or(20);
-                            match qdrant
+                            match vb
                                 .search_by_vector(type_name, vector, limit, sm.threshold)
                                 .await
                             {
                                 Ok(scored) => {
-                                    tracing::debug!(count = scored.len(), input = %sm.input, "semantic_match returned {} results", scored.len());
                                     if !scored.is_empty() {
                                         let mut ids = std::collections::HashSet::new();
                                         for (id, score) in scored {
@@ -436,43 +696,38 @@ impl StorageManager {
                                             semantic_scores.insert(id, score);
                                         }
                                         semantic_ids = Some(ids);
-                                    } else {
-                                        tracing::debug!("semantic_match returned 0 results, treating as unconstrained");
                                     }
                                 }
                                 Err(e) => {
-                                    tracing::error!(error = %e, "semantic search failed, proceeding without");
+                                    tracing::error!(error = %e, "semantic search failed");
                                 }
                             }
                         }
                         Err(e) => {
-                            tracing::error!(error = %e, "embedding generation for query failed");
+                            tracing::error!(error = %e, "embedding generation failed");
                         }
                     }
                 }
             }
         }
 
-        // Union graph and semantic candidate IDs — either backend can
-        // contribute relevant results rather than requiring both to agree.
+        // Record semantic scores under their aliases
+        for (alias, kind) in &filter.score_aliases {
+            if kind == "semantic" {
+                let scores = alias_scores.entry(alias.clone()).or_default();
+                for (id, score) in &semantic_scores {
+                    scores.insert(id.clone(), *score as f64);
+                }
+            }
+        }
+
         let candidate_ids: Option<std::collections::HashSet<String>> =
             match (&graph_ids, &semantic_ids) {
-                (Some(g), Some(s)) => {
-                    let union: std::collections::HashSet<String> = g.union(s).cloned().collect();
-                    tracing::debug!(
-                        graph = g.len(),
-                        semantic = s.len(),
-                        union = union.len(),
-                        "unioned candidate IDs"
-                    );
-                    Some(union)
-                }
+                (Some(g), Some(s)) => Some(g.union(s).cloned().collect()),
                 (Some(g), None) => Some(g.clone()),
                 (None, Some(s)) => Some(s.clone()),
                 (None, None) => None,
             };
-
-        tracing::debug!(type_name = %type_name, conditions = ?filter.conditions, limit = ?filter.limit, "query filter");
 
         let mut results = if let Some(ref raw_sql) = filter.raw_sql {
             if let Some(StorageBackend::Sqlite(ref sqlite)) = self.relational {
@@ -486,32 +741,13 @@ impl StorageManager {
             vec![]
         };
 
-        tracing::debug!(
-            count = results.len(),
-            "relational query returned {} records",
-            results.len()
-        );
-
         if let Some(ref ids) = candidate_ids {
             if results.is_empty() {
-                // Relational backend has no data — fall back to fetching records
-                // from graph or vector backends using candidate IDs.
-                tracing::debug!(
-                    candidates = ids.len(),
-                    "relational empty, fetching from alternate backends"
-                );
                 results = self.fetch_records_by_ids(type_name, ids, filter).await?;
             } else {
-                let before = results.len();
                 results.retain(|r| ids.contains(&r.id));
-                tracing::debug!(
-                    before = before,
-                    after = results.len(),
-                    "filtered relational results by candidate IDs"
-                );
             }
-        } else if results.is_empty() && (self.graph.is_some() || self.vector.is_some()) {
-            tracing::debug!("relational empty, falling back to graph/vector backends");
+        } else if results.is_empty() && (!self.graphs.is_empty() || !self.vectors.is_empty()) {
             results = self.fallback_query_all(type_name, filter).await?;
         }
 
@@ -525,7 +761,7 @@ impl StorageManager {
             });
         }
 
-        // Attach _score from semantic search to each record
+        // Attach _score (backward compat: from semantic search)
         if !semantic_scores.is_empty() {
             for r in &mut results {
                 if let Some(&score) = semantic_scores.get(&r.id) {
@@ -534,32 +770,20 @@ impl StorageManager {
             }
         }
 
-        // Apply _score ordering in memory (since it's a virtual field)
-        if let Some(asc) = score_order {
-            results.sort_by(|a, b| {
-                let sa = a
-                    .fields
-                    .get("_score")
-                    .and_then(|v| v.as_f64())
-                    .unwrap_or(0.0);
-                let sb = b
-                    .fields
-                    .get("_score")
-                    .and_then(|v| v.as_f64())
-                    .unwrap_or(0.0);
-                let ord = sa.partial_cmp(&sb).unwrap_or(std::cmp::Ordering::Equal);
-                if asc {
-                    ord
-                } else {
-                    ord.reverse()
-                }
-            });
-        }
-
         if let Some(limit) = deferred_limit {
             results.truncate(limit);
         }
 
+        Ok((results, alias_scores))
+    }
+
+    /// Backward-compatible query method (no alias scores)
+    pub async fn query(
+        &self,
+        type_name: &str,
+        filter: &QueryFilter,
+    ) -> StorageResult<Vec<Record>> {
+        let (results, _) = self.query_with_scores(type_name, filter).await?;
         Ok(results)
     }
 
@@ -574,11 +798,11 @@ impl StorageManager {
         if let Some(ref r) = self.relational {
             r.delete(type_name, id).await?;
         }
-        if let Some(StorageBackend::Qdrant(ref qdrant)) = self.vector {
-            qdrant.delete(type_name, id).await?;
+        for v in self.vectors.values() {
+            let _ = v.delete(type_name, id).await;
         }
-        if let Some(ref g) = self.graph {
-            g.delete(type_name, id).await?;
+        for g in self.graphs.values() {
+            let _ = g.delete(type_name, id).await;
         }
         Ok(())
     }
@@ -592,65 +816,58 @@ impl StorageManager {
         if let Some(ref r) = self.relational {
             r.ensure_table(type_name, fields, indexes).await?;
         }
-        if let Some(ref v) = self.vector {
+        for v in self.vectors.values() {
             v.ensure_table(type_name, fields, indexes).await?;
+        }
+        for g in self.graphs.values() {
+            g.ensure_table(type_name, fields, indexes).await?;
         }
         Ok(())
     }
 
-    /// Clear all records from all backends for the given memory types.
     pub async fn clear(&self, memory_names: &[&str]) -> StorageResult<serde_json::Value> {
         let mut report = serde_json::Map::new();
 
         if let Some(StorageBackend::Sqlite(ref sqlite)) = self.relational {
             let mut cleared = Vec::new();
             for name in memory_names {
-                match sqlite.clear(name).await {
-                    Ok(()) => cleared.push(name.to_string()),
-                    Err(e) => {
-                        tracing::warn!(table = name, error = %e, "failed to clear SQLite table")
-                    }
+                if sqlite.clear(name).await.is_ok() {
+                    cleared.push(name.to_string());
                 }
             }
             report.insert("sqlite".into(), serde_json::json!(cleared));
         }
 
-        if let Some(StorageBackend::Qdrant(ref qdrant)) = self.vector {
+        for (backend_name, v) in &self.vectors {
             let mut cleared = Vec::new();
             for name in memory_names {
-                match qdrant.clear(name).await {
-                    Ok(()) => cleared.push(name.to_string()),
-                    Err(e) => {
-                        tracing::warn!(collection = name, error = %e, "failed to clear Qdrant collection")
-                    }
+                if v.clear(name).await.is_ok() {
+                    cleared.push(name.to_string());
                 }
             }
-            report.insert("qdrant".into(), serde_json::json!(cleared));
+            report.insert(
+                format!("vector_{backend_name}"),
+                serde_json::json!(cleared),
+            );
         }
 
-        if let Some(StorageBackend::Neo4j(ref neo)) = self.graph {
+        for (backend_name, g) in &self.graphs {
             let mut cleared = Vec::new();
             for name in memory_names {
-                match neo.clear(name).await {
-                    Ok(()) => cleared.push(name.to_string()),
-                    Err(e) => {
-                        tracing::warn!(label = name, error = %e, "failed to clear Neo4j label")
-                    }
+                if g.clear(name).await.is_ok() {
+                    cleared.push(name.to_string());
                 }
             }
-            // Also clear Entity nodes
-            if let Err(e) = neo.clear("Entity").await {
-                tracing::warn!(error = %e, "failed to clear Neo4j Entity nodes");
-            } else {
-                cleared.push("Entity".into());
-            }
-            report.insert("neo4j".into(), serde_json::json!(cleared));
+            let _ = g.clear("Entity").await;
+            report.insert(
+                format!("graph_{backend_name}"),
+                serde_json::json!(cleared),
+            );
         }
 
         Ok(serde_json::Value::Object(report))
     }
 
-    /// Execute raw SQL against the relational backend.
     pub fn raw_sql(&self, sql: &str) -> StorageResult<Vec<crate::value::Record>> {
         if let Some(StorageBackend::Sqlite(ref sqlite)) = self.relational {
             sqlite.raw_sql(sql)
@@ -661,11 +878,9 @@ impl StorageManager {
         }
     }
 
-    /// Inspect all backends: list tables/collections and record counts.
     pub async fn inspect(&self, memory_names: &[&str]) -> serde_json::Value {
         let mut result = serde_json::json!({});
 
-        // SQLite
         if let Some(StorageBackend::Sqlite(ref sqlite)) = self.relational {
             let mut tables = serde_json::Map::new();
             for name in memory_names {
@@ -677,19 +892,11 @@ impl StorageManager {
                             .collect();
                         tables.insert(
                             name.to_string(),
-                            serde_json::json!({
-                                "count": rows.len(),
-                                "records": rows,
-                            }),
+                            serde_json::json!({ "count": rows.len(), "records": rows }),
                         );
                     }
                     Err(e) => {
-                        tables.insert(
-                            name.to_string(),
-                            serde_json::json!({
-                                "error": e.to_string(),
-                            }),
-                        );
+                        tables.insert(name.to_string(), serde_json::json!({ "error": e.to_string() }));
                     }
                 }
             }
@@ -698,12 +905,11 @@ impl StorageManager {
             result["sqlite"] = serde_json::json!("not configured");
         }
 
-        // Qdrant
-        if let Some(StorageBackend::Qdrant(ref qdrant)) = self.vector {
+        for (backend_name, vb) in &self.vectors {
             let mut collections = serde_json::Map::new();
             for name in memory_names {
                 let filter = QueryFilter::default();
-                match qdrant.query(name, &filter).await {
+                match vb.query(name, &filter).await {
                     Ok(records) => {
                         let rows: Vec<serde_json::Value> = records
                             .into_iter()
@@ -711,33 +917,22 @@ impl StorageManager {
                             .collect();
                         collections.insert(
                             name.to_string(),
-                            serde_json::json!({
-                                "count": rows.len(),
-                                "records": rows,
-                            }),
+                            serde_json::json!({ "count": rows.len(), "records": rows }),
                         );
                     }
                     Err(e) => {
-                        collections.insert(
-                            name.to_string(),
-                            serde_json::json!({
-                                "error": e.to_string(),
-                            }),
-                        );
+                        collections.insert(name.to_string(), serde_json::json!({ "error": e.to_string() }));
                     }
                 }
             }
-            result["qdrant"] = serde_json::Value::Object(collections);
-        } else {
-            result["qdrant"] = serde_json::json!("not configured");
+            result[format!("vector_{backend_name}")] = serde_json::Value::Object(collections);
         }
 
-        // Neo4j
-        if let Some(StorageBackend::Neo4j(ref neo)) = self.graph {
+        for (backend_name, gb) in &self.graphs {
             let mut nodes = serde_json::Map::new();
             for name in memory_names {
                 let filter = QueryFilter::default();
-                match neo.query(name, &filter).await {
+                match gb.query(name, &filter).await {
                     Ok(records) => {
                         let rows: Vec<serde_json::Value> = records
                             .into_iter()
@@ -745,40 +940,15 @@ impl StorageManager {
                             .collect();
                         nodes.insert(
                             name.to_string(),
-                            serde_json::json!({
-                                "count": rows.len(),
-                                "records": rows,
-                            }),
+                            serde_json::json!({ "count": rows.len(), "records": rows }),
                         );
                     }
                     Err(e) => {
-                        nodes.insert(
-                            name.to_string(),
-                            serde_json::json!({
-                                "error": e.to_string(),
-                            }),
-                        );
+                        nodes.insert(name.to_string(), serde_json::json!({ "error": e.to_string() }));
                     }
                 }
             }
-            // Also grab Entity nodes
-            let filter = QueryFilter::default();
-            if let Ok(records) = neo.query("Entity", &filter).await {
-                let rows: Vec<serde_json::Value> = records
-                    .into_iter()
-                    .map(|r| serde_json::Value::from(Value::Record(r)))
-                    .collect();
-                nodes.insert(
-                    "Entity".to_string(),
-                    serde_json::json!({
-                        "count": rows.len(),
-                        "records": rows,
-                    }),
-                );
-            }
-            result["neo4j"] = serde_json::Value::Object(nodes);
-        } else {
-            result["neo4j"] = serde_json::json!("not configured");
+            result[format!("graph_{backend_name}")] = serde_json::Value::Object(nodes);
         }
 
         result

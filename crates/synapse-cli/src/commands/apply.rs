@@ -4,11 +4,127 @@ use std::path::Path;
 use synapse_dsl::ast::Item;
 use synapse_runtime::config::{GraphConfig, RuntimeConfig, VectorConfig};
 use synapse_runtime::llm::{EmbeddingClient, LlmClient};
-use synapse_runtime::storage::neo4j::Neo4jBackend;
-use synapse_runtime::storage::qdrant::QdrantBackend;
 use synapse_runtime::storage::sqlite::SqliteBackend;
-use synapse_runtime::storage::StorageBackend;
+use synapse_runtime::storage::{StorageBackend, VectorBackendKind, GraphBackendKind};
 use synapse_runtime::{docker, Runtime, StorageManager};
+
+async fn connect_vector_backend(
+    name: &str,
+    cfg: &VectorConfig,
+    data_dir: &Path,
+) -> anyhow::Result<VectorBackendKind> {
+    match cfg {
+        VectorConfig::Auto { backend } => {
+            docker::ensure_docker_available()?;
+            match backend.as_str() {
+                "qdrant" => {
+                    let url = docker::ensure_qdrant(data_dir).await?;
+                    let vb = synapse_runtime::storage::qdrant::QdrantBackend::connect(&url).await?;
+                    println!("  ✓ Qdrant [{name}] auto-started at {url}");
+                    Ok(VectorBackendKind::Qdrant(vb))
+                }
+                "weaviate" => {
+                    let url = docker::ensure_weaviate(data_dir, name).await?;
+                    let vb = synapse_runtime::storage::weaviate::WeaviateBackend::connect(&url).await?;
+                    println!("  ✓ Weaviate [{name}] auto-started at {url}");
+                    Ok(VectorBackendKind::Weaviate(vb))
+                }
+                "chromadb" | "chroma" => {
+                    let url = docker::ensure_chromadb(data_dir, name).await?;
+                    let vb = synapse_runtime::storage::chromadb::ChromaDBBackend::connect(&url).await?;
+                    println!("  ✓ ChromaDB [{name}] auto-started at {url}");
+                    Ok(VectorBackendKind::ChromaDB(vb))
+                }
+                other => anyhow::bail!("unknown vector backend for auto: {other}"),
+            }
+        }
+        VectorConfig::External { backend, url } => match backend.as_str() {
+            "qdrant" => {
+                let vb = synapse_runtime::storage::qdrant::QdrantBackend::connect(url).await?;
+                println!("  ✓ Qdrant [{name}] connected at {url}");
+                Ok(VectorBackendKind::Qdrant(vb))
+            }
+            "pinecone" => {
+                let vb = synapse_runtime::storage::pinecone::PineconeBackend::connect(url).await?;
+                println!("  ✓ Pinecone [{name}] connected at {url}");
+                Ok(VectorBackendKind::Pinecone(vb))
+            }
+            "weaviate" => {
+                let vb = synapse_runtime::storage::weaviate::WeaviateBackend::connect(url).await?;
+                println!("  ✓ Weaviate [{name}] connected at {url}");
+                Ok(VectorBackendKind::Weaviate(vb))
+            }
+            "chromadb" | "chroma" => {
+                let vb = synapse_runtime::storage::chromadb::ChromaDBBackend::connect(url).await?;
+                println!("  ✓ ChromaDB [{name}] connected at {url}");
+                Ok(VectorBackendKind::ChromaDB(vb))
+            }
+            other => anyhow::bail!("unknown vector backend: {other}"),
+        },
+    }
+}
+
+async fn connect_graph_backend(
+    name: &str,
+    cfg: &GraphConfig,
+    data_dir: &Path,
+) -> anyhow::Result<GraphBackendKind> {
+    match cfg {
+        GraphConfig::Auto { backend } => {
+            docker::ensure_docker_available()?;
+            match backend.as_str() {
+                "neo4j" => {
+                    let url = docker::ensure_neo4j(data_dir).await?;
+                    let gb = synapse_runtime::storage::neo4j::Neo4jBackend::connect(&url).await?;
+                    println!("  ✓ Neo4j [{name}] auto-started at {url}");
+                    Ok(GraphBackendKind::Neo4j(gb))
+                }
+                "memgraph" => {
+                    let url = docker::ensure_memgraph(data_dir, name).await?;
+                    let gb = synapse_runtime::storage::memgraph::MemgraphBackend::connect(&url).await?;
+                    println!("  ✓ Memgraph [{name}] auto-started at {url}");
+                    Ok(GraphBackendKind::Memgraph(gb))
+                }
+                "arangodb" | "arango" => {
+                    let url = docker::ensure_arangodb(data_dir, name).await?;
+                    let gb = synapse_runtime::storage::arangodb::ArangoDBBackend::connect(&url).await?;
+                    println!("  ✓ ArangoDB [{name}] auto-started at {url}");
+                    Ok(GraphBackendKind::ArangoDB(gb))
+                }
+                "surrealdb" | "surreal" => {
+                    let url = docker::ensure_surrealdb(data_dir, name).await?;
+                    let gb = synapse_runtime::storage::surrealdb::SurrealDBBackend::connect(&url).await?;
+                    println!("  ✓ SurrealDB [{name}] auto-started at {url}");
+                    Ok(GraphBackendKind::SurrealDB(gb))
+                }
+                other => anyhow::bail!("unknown graph backend for auto: {other}"),
+            }
+        }
+        GraphConfig::External { backend, url } => match backend.as_str() {
+            "neo4j" => {
+                let gb = synapse_runtime::storage::neo4j::Neo4jBackend::connect(url).await?;
+                println!("  ✓ Neo4j [{name}] connected at {url}");
+                Ok(GraphBackendKind::Neo4j(gb))
+            }
+            "memgraph" => {
+                let gb = synapse_runtime::storage::memgraph::MemgraphBackend::connect(url).await?;
+                println!("  ✓ Memgraph [{name}] connected at {url}");
+                Ok(GraphBackendKind::Memgraph(gb))
+            }
+            "arangodb" | "arango" => {
+                let gb = synapse_runtime::storage::arangodb::ArangoDBBackend::connect(url).await?;
+                println!("  ✓ ArangoDB [{name}] connected at {url}");
+                Ok(GraphBackendKind::ArangoDB(gb))
+            }
+            "surrealdb" | "surreal" => {
+                let gb = synapse_runtime::storage::surrealdb::SurrealDBBackend::connect(url).await?;
+                println!("  ✓ SurrealDB [{name}] connected at {url}");
+                Ok(GraphBackendKind::SurrealDB(gb))
+            }
+            other => anyhow::bail!("unknown graph backend: {other}"),
+        },
+    }
+}
 
 pub async fn run(file: &str, port: Option<u16>, daemon: bool) -> anyhow::Result<()> {
     println!("Applying {file}...");
@@ -18,7 +134,6 @@ pub async fn run(file: &str, port: Option<u16>, daemon: bool) -> anyhow::Result<
     synapse_dsl::typeck::check(&program)?;
     println!("  ✓ Compiled successfully");
 
-    // Extract config
     let mut config = RuntimeConfig::default();
     for item in &program.items {
         if let Item::Config(cfg) = item {
@@ -33,7 +148,6 @@ pub async fn run(file: &str, port: Option<u16>, daemon: bool) -> anyhow::Result<
 
     let data_dir = Path::new(".synapse");
 
-    // Set up storage
     let mut storage = StorageManager::new();
 
     if let Some(ref sc) = config.storage {
@@ -42,39 +156,28 @@ pub async fn run(file: &str, port: Option<u16>, daemon: bool) -> anyhow::Result<
         println!("  ✓ Connected to sqlite ({})", sc.url);
     }
 
-    match &config.vector {
-        Some(VectorConfig::Auto) => {
-            docker::ensure_docker_available()?;
-            let url = docker::ensure_qdrant(data_dir).await?;
-            let qdrant = QdrantBackend::connect(&url).await?;
-            storage.vector = Some(StorageBackend::Qdrant(qdrant));
-            println!("  ✓ Qdrant auto-started at {url}");
+    // Connect vector backends
+    for (name, vcfg) in &config.vectors {
+        match connect_vector_backend(name, vcfg, data_dir).await {
+            Ok(vb) => { storage.vectors.insert(name.clone(), vb); }
+            Err(e) => {
+                tracing::error!(error = %e, backend = %name, "failed to connect vector backend");
+                eprintln!("  ✗ Vector backend [{name}] failed: {e}");
+            }
         }
-        Some(VectorConfig::External { url, .. }) => {
-            let qdrant = QdrantBackend::connect(url).await?;
-            storage.vector = Some(StorageBackend::Qdrant(qdrant));
-            println!("  ✓ Connected to Qdrant ({url})");
-        }
-        None => {}
     }
 
-    match &config.graph {
-        Some(GraphConfig::Auto) => {
-            docker::ensure_docker_available()?;
-            let url = docker::ensure_neo4j(data_dir).await?;
-            let neo4j = Neo4jBackend::connect(&url).await?;
-            storage.graph = Some(StorageBackend::Neo4j(neo4j));
-            println!("  ✓ Neo4j auto-started at {url}");
+    // Connect graph backends
+    for (name, gcfg) in &config.graphs {
+        match connect_graph_backend(name, gcfg, data_dir).await {
+            Ok(gb) => { storage.graphs.insert(name.clone(), gb); }
+            Err(e) => {
+                tracing::error!(error = %e, backend = %name, "failed to connect graph backend");
+                eprintln!("  ✗ Graph backend [{name}] failed: {e}");
+            }
         }
-        Some(GraphConfig::External { url, .. }) => {
-            let neo4j = Neo4jBackend::connect(url).await?;
-            storage.graph = Some(StorageBackend::Neo4j(neo4j));
-            println!("  ✓ Connected to Neo4j ({url})");
-        }
-        None => {}
     }
 
-    // Build LLM client from extractor config (if present)
     let llm = match &config.extractor {
         Some(ext_cfg) => {
             let client = LlmClient::from_config(ext_cfg)?;
@@ -87,7 +190,6 @@ pub async fn run(file: &str, port: Option<u16>, daemon: bool) -> anyhow::Result<
         None => None,
     };
 
-    // Build embedding client (if configured), shared between storage and runtime
     let embedder = match &config.embedding {
         Some(emb_cfg) => {
             let client = EmbeddingClient::from_config(emb_cfg)?;
@@ -102,17 +204,16 @@ pub async fn run(file: &str, port: Option<u16>, daemon: bool) -> anyhow::Result<
 
     storage.embedder = embedder.clone();
 
+    // Wire embedder to all vector backends
     if let Some(ref emb) = embedder {
-        if let Some(StorageBackend::Qdrant(ref mut qdrant)) = storage.vector {
-            qdrant.set_embedder(emb.clone());
+        for vb in storage.vectors.values_mut() {
+            vb.set_embedder(emb.clone());
         }
     }
 
-    // Build runtime
     let runtime = Runtime::new(program, storage, llm, embedder).with_source_file(file);
     runtime.init_storage().await?;
 
-    // Start policy scheduler
     let scheduler = synapse_runtime::interpreter::policy::PolicyScheduler::from_program(
         &runtime.program,
         runtime.storage.clone(),
@@ -135,7 +236,6 @@ pub async fn run(file: &str, port: Option<u16>, daemon: bool) -> anyhow::Result<
         println!("\n  Press Ctrl+C to stop.\n");
     }
 
-    // Save state
     let state = serde_json::json!({
         "pid": std::process::id(),
         "addr": addr,

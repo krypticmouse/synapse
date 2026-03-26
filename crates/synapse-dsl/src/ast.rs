@@ -41,6 +41,7 @@ pub enum ConfigValue {
     FnCall { name: String, arg: String },
     None,
     Auto,
+    Dict(Vec<(String, ConfigValue)>),
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -306,6 +307,12 @@ pub enum Expr {
 
     // Inline query expression: from X where ... order by ... limit ...
     InlineQuery(Box<QueryBody>),
+
+    // Alias: expr as name (used in query WHERE for scoring aliases)
+    Alias {
+        expr: Box<Expr>,
+        alias: String,
+    },
 }
 
 #[derive(Debug, Clone)]

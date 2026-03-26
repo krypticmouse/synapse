@@ -14,9 +14,13 @@ pub async fn exec_query(env: &mut ExecEnv, query: &QueryDef) -> anyhow::Result<V
 pub async fn exec_query_body(env: &mut ExecEnv, body: &QueryBody) -> anyhow::Result<Vec<Value>> {
     let mut filter = QueryFilter::default();
 
-    if let Some(ref ob) = body.order_by {
-        if let Expr::Ident(field) = &ob.expr {
-            filter.order_by = Some((field.clone(), ob.direction == SortDir::Asc));
+    // Store the order-by expression for potential expression evaluation
+    let order_expr = body.order_by.as_ref().map(|ob| (ob.expr.clone(), ob.direction));
+
+    // Simple ident ordering goes to the backend filter
+    if let Some((ref expr, dir)) = order_expr {
+        if let Expr::Ident(field) = expr {
+            filter.order_by = Some((field.clone(), dir == SortDir::Asc));
         }
     }
 
@@ -33,19 +37,130 @@ pub async fn exec_query_body(env: &mut ExecEnv, body: &QueryBody) -> anyhow::Res
 
     let mut all_results = vec![];
     for source in &body.from {
-        let records = env.storage.query(source, &filter).await?;
-        for r in records {
+        let (records, alias_scores) = env.storage.query_with_scores(source, &filter).await?;
+        for mut r in records {
+            // Attach alias scores to each record as virtual fields
+            for (alias, scores) in &alias_scores {
+                if let Some(&score) = scores.get(&r.id) {
+                    r.set(alias, Value::Float(score));
+                }
+            }
             all_results.push(Value::Record(r));
+        }
+    }
+
+    // Apply expression-based ordering if the order-by is not a simple ident
+    if let Some((ref expr, dir)) = order_expr {
+        if !matches!(expr, Expr::Ident(_)) {
+            all_results.sort_by(|a, b| {
+                let score_a = eval_order_expr(expr, a);
+                let score_b = eval_order_expr(expr, b);
+                let ord = score_a
+                    .partial_cmp(&score_b)
+                    .unwrap_or(std::cmp::Ordering::Equal);
+                if dir == SortDir::Asc { ord } else { ord.reverse() }
+            });
+
+            // Apply limit after expression-based ordering
+            if let Some(limit) = filter.limit {
+                all_results.truncate(limit);
+            }
         }
     }
 
     Ok(all_results)
 }
 
+/// Evaluate an order-by expression against a record's fields.
+/// Supports arithmetic on alias fields (e.g., `(sm + gm) / 2`).
+fn eval_order_expr(expr: &Expr, val: &Value) -> f64 {
+    match expr {
+        Expr::Ident(name) => {
+            if let Value::Record(r) = val {
+                r.fields
+                    .get(name)
+                    .and_then(|v| v.as_f64())
+                    .unwrap_or(0.0)
+            } else {
+                0.0
+            }
+        }
+        Expr::Float(f) => *f,
+        Expr::Int(n) => *n as f64,
+        Expr::Binary { left, op, right } => {
+            let l = eval_order_expr(left, val);
+            let r = eval_order_expr(right, val);
+            match op {
+                BinOp::Add => l + r,
+                BinOp::Sub => l - r,
+                BinOp::Mul => l * r,
+                BinOp::Div => {
+                    if r != 0.0 {
+                        l / r
+                    } else {
+                        0.0
+                    }
+                }
+                BinOp::Mod => {
+                    if r != 0.0 {
+                        l % r
+                    } else {
+                        0.0
+                    }
+                }
+                _ => 0.0,
+            }
+        }
+        Expr::Unary { op, operand } => {
+            let v = eval_order_expr(operand, val);
+            match op {
+                UnaryOp::Neg => -v,
+                UnaryOp::Not => {
+                    if v == 0.0 {
+                        1.0
+                    } else {
+                        0.0
+                    }
+                }
+            }
+        }
+        Expr::Call { func, args } => {
+            if let Expr::Ident(name) = func.as_ref() {
+                let arg_vals: Vec<f64> = args.iter().map(|a| eval_order_expr(&a.value, val)).collect();
+                match name.as_str() {
+                    "min" => arg_vals.iter().copied().fold(f64::INFINITY, f64::min),
+                    "max" => arg_vals.iter().copied().fold(f64::NEG_INFINITY, f64::max),
+                    _ => 0.0,
+                }
+            } else {
+                0.0
+            }
+        }
+        _ => 0.0,
+    }
+}
+
 /// Extract conditions from a where clause expression into the QueryFilter.
-/// Handles simple field comparisons, graph_match(), and cypher() calls.
 async fn extract_conditions(env: &mut ExecEnv, expr: &Expr, filter: &mut QueryFilter) {
     match expr {
+        // Handle `expr as alias` — extract the inner expression and register the alias
+        Expr::Alias { expr: inner, alias } => {
+            // Determine what kind of scoring this alias represents
+            if let Expr::Call { func, .. } = inner.as_ref() {
+                if let Expr::Ident(name) = func.as_ref() {
+                    let kind = match name.as_str() {
+                        "semantic_match" => "semantic",
+                        "graph_match" | "cypher" => "graph",
+                        _ => "unknown",
+                    };
+                    filter
+                        .score_aliases
+                        .insert(alias.clone(), kind.to_string());
+                }
+            }
+            Box::pin(extract_conditions(env, inner, filter)).await;
+        }
+
         Expr::Binary { left, op, right } => {
             let cond_op = match op {
                 BinOp::Eq => Some(ConditionOp::Eq),
@@ -110,6 +225,19 @@ async fn extract_conditions(env: &mut ExecEnv, expr: &Expr, filter: &mut QueryFi
                             })
                             .unwrap_or(2);
 
+                        // Extract backend parameter
+                        let backend = args.iter().find_map(|a| {
+                            if a.name.as_deref() == Some("backend") {
+                                if let Expr::Str(s) = &a.value {
+                                    return Some(s.clone());
+                                }
+                            }
+                            None
+                        });
+                        if let Some(b) = backend {
+                            filter.graph_backend = Some(b);
+                        }
+
                         filter.graph_match = Some(GraphMatch { input, hops });
                     }
 
@@ -127,8 +255,6 @@ async fn extract_conditions(env: &mut ExecEnv, expr: &Expr, filter: &mut QueryFi
                                     }
                                 }
 
-                                // Also pull in query params from env scope
-                                // (e.g. query GetX(entity: string) — `entity` is in scope)
                                 let query_str_owned = query_str.clone();
                                 for word in query_str_owned.split('$') {
                                     if let Some(param_name) = word
@@ -180,6 +306,19 @@ async fn extract_conditions(env: &mut ExecEnv, expr: &Expr, filter: &mut QueryFi
                                 }
                             })
                             .unwrap_or(0.7);
+
+                        // Extract backend parameter
+                        let backend = args.iter().find_map(|a| {
+                            if a.name.as_deref() == Some("backend") {
+                                if let Expr::Str(s) = &a.value {
+                                    return Some(s.clone());
+                                }
+                            }
+                            None
+                        });
+                        if let Some(b) = backend {
+                            filter.vector_backend = Some(b);
+                        }
 
                         filter.semantic_match =
                             Some(crate::storage::SemanticMatch { input, threshold });

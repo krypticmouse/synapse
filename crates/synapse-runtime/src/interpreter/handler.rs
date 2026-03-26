@@ -207,6 +207,10 @@ async fn eval_expr_inner(env: &mut ExecEnv, expr: &Expr) -> anyhow::Result<Value
             let results = super::query::exec_query_body(env, qb).await?;
             Ok(Value::Array(results))
         }
+
+        Expr::Alias { expr, .. } => {
+            eval_expr(env, expr).await
+        }
     }
 }
 
@@ -442,8 +446,8 @@ async fn eval_call(env: &mut ExecEnv, func: &Expr, args: &[CallArg]) -> anyhow::
                 .unwrap_or(2);
             let type_name = env.get("_update_target");
             let tn = type_name.as_str().unwrap_or("Entity");
-            if let Some(crate::storage::StorageBackend::Neo4j(ref neo)) = *&env.storage.graph {
-                match neo.graph_match_ids(tn, &input, hops).await {
+            if let Some(gb) = env.storage.graph(None) {
+                match gb.graph_match_ids(tn, &input, hops).await {
                     Ok(ids) => {
                         let results: Vec<Value> = ids.into_iter().map(Value::String).collect();
                         Ok(Value::Array(results))
@@ -478,8 +482,8 @@ async fn eval_call(env: &mut ExecEnv, func: &Expr, args: &[CallArg]) -> anyhow::
                     }
                 }
             }
-            if let Some(crate::storage::StorageBackend::Neo4j(ref neo)) = *&env.storage.graph {
-                match neo.cypher_query_ids(&query_str, &params).await {
+            if let Some(gb) = env.storage.graph(None) {
+                match gb.cypher_query_ids(&query_str, &params).await {
                     Ok(ids) => {
                         let results: Vec<Value> = ids.into_iter().map(Value::String).collect();
                         Ok(Value::Array(results))
@@ -696,6 +700,12 @@ async fn eval_piped_call(
     left_val: Value,
     extra_args: &[CallArg],
 ) -> anyhow::Result<Value> {
+    // Unwrap any Alias wrapper(s) to get to the actual function expression
+    let mut func = func;
+    while let Expr::Alias { expr, .. } = func {
+        func = expr;
+    }
+
     let (func_name, lambda_args): (&str, &[CallArg]) = match func {
         Expr::Ident(name) => (name.as_str(), extra_args),
         Expr::Call { func: inner, args } => {

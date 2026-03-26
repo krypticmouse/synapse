@@ -64,6 +64,9 @@ pub enum Token {
     #[token("embedded")]
     Embedded,
 
+    #[token("as")]
+    As,
+
     // ───────────────────────────────────────────────────────────────
     // DECORATORS
     // ───────────────────────────────────────────────────────────────
@@ -303,6 +306,7 @@ impl fmt::Display for Token {
             Token::None => write!(f, "none"),
             Token::Auto => write!(f, "auto"),
             Token::Embedded => write!(f, "embedded"),
+            Token::As => write!(f, "as"),
             Token::Extern => write!(f, "@extern"),
             Token::Index => write!(f, "@index"),
             Token::Invariant => write!(f, "@invariant"),

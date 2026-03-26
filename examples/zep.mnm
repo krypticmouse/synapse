@@ -6,7 +6,7 @@ config {
   vector: auto
   graph: auto
   embedding: openai("text-embedding-3-small")
-  extractor: openai("gpt-5-mini")
+  extractor: openai("gpt-4o-mini")
 }
 
 namespace zep_agent {
@@ -73,14 +73,14 @@ namespace zep_agent {
 
   # === QUERIES ===
   
-  # Hybrid retrieval: semantic + graph, ranked by _score
+  # Hybrid retrieval: semantic + graph with aliased scoring
   query GetContext(input: string): Fact[] {
     from Fact
-    where semantic_match(input, threshold: 0.6)
-      and graph_match(input, hops: 2)
-      and valid_until == null  # Only current facts
-    order by _score desc
-    limit 1
+    where semantic_match(input, threshold: 0.6) as sm
+      and graph_match(input, hops: 2) as gm
+      and valid_until == null
+    order by (sm * 0.7 + gm * 0.3) desc
+    limit 10
   }
 
   # Entity timeline: all facts about an entity, chronological

@@ -186,6 +186,200 @@ pub async fn ensure_neo4j(data_dir: &Path) -> Result<String> {
     Ok(bolt_url)
 }
 
+// ═══════════════════════════════════════════════════════════════
+// ADDITIONAL BACKENDS
+// ═══════════════════════════════════════════════════════════════
+
+const WEAVIATE_CONTAINER: &str = "synapse-weaviate";
+const WEAVIATE_IMAGE: &str = "semitechnologies/weaviate:latest";
+const WEAVIATE_PORT: u16 = 8090;
+
+const CHROMADB_CONTAINER: &str = "synapse-chromadb";
+const CHROMADB_IMAGE: &str = "chromadb/chroma:latest";
+const CHROMADB_PORT: u16 = 8091;
+
+const MEMGRAPH_CONTAINER: &str = "synapse-memgraph";
+const MEMGRAPH_IMAGE: &str = "memgraph/memgraph:latest";
+const MEMGRAPH_BOLT_PORT: u16 = 7688;
+
+const ARANGODB_CONTAINER: &str = "synapse-arangodb";
+const ARANGODB_IMAGE: &str = "arangodb:latest";
+const ARANGODB_PORT: u16 = 8529;
+
+const SURREALDB_CONTAINER: &str = "synapse-surrealdb";
+const SURREALDB_IMAGE: &str = "surrealdb/surrealdb:latest";
+const SURREALDB_PORT: u16 = 8092;
+
+/// Ensure a Weaviate container is running. Returns the HTTP URL.
+pub async fn ensure_weaviate(data_dir: &Path, instance: &str) -> Result<String> {
+    let container = format!("{WEAVIATE_CONTAINER}-{instance}");
+    let storage_dir = data_dir.join(format!("weaviate_{instance}"));
+    std::fs::create_dir_all(&storage_dir)?;
+    let port = WEAVIATE_PORT + hash_offset(instance);
+
+    match inspect_container(&container) {
+        ContainerState::Running => {}
+        ContainerState::Stopped => { start_container(&container)?; }
+        ContainerState::NotFound => {
+            let status = Command::new("docker")
+                .args([
+                    "run", "-d", "--name", &container,
+                    "-p", &format!("{port}:8080"),
+                    "-e", "AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED=true",
+                    "-e", "PERSISTENCE_DATA_PATH=/var/lib/weaviate",
+                    "-v", &format!("{}:/var/lib/weaviate", storage_dir.canonicalize().unwrap_or(storage_dir).display()),
+                    WEAVIATE_IMAGE,
+                ])
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::piped())
+                .status()?;
+            if !status.success() {
+                bail!("Failed to create Weaviate container on port {port}");
+            }
+        }
+    }
+
+    wait_for_port(port, Duration::from_secs(30)).await?;
+    Ok(format!("http://localhost:{port}"))
+}
+
+/// Ensure a ChromaDB container is running. Returns the HTTP URL.
+pub async fn ensure_chromadb(data_dir: &Path, instance: &str) -> Result<String> {
+    let container = format!("{CHROMADB_CONTAINER}-{instance}");
+    let storage_dir = data_dir.join(format!("chromadb_{instance}"));
+    std::fs::create_dir_all(&storage_dir)?;
+    let port = CHROMADB_PORT + hash_offset(instance);
+
+    match inspect_container(&container) {
+        ContainerState::Running => {}
+        ContainerState::Stopped => { start_container(&container)?; }
+        ContainerState::NotFound => {
+            let status = Command::new("docker")
+                .args([
+                    "run", "-d", "--name", &container,
+                    "-p", &format!("{port}:8000"),
+                    "-v", &format!("{}:/chroma/chroma", storage_dir.canonicalize().unwrap_or(storage_dir).display()),
+                    CHROMADB_IMAGE,
+                ])
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::piped())
+                .status()?;
+            if !status.success() {
+                bail!("Failed to create ChromaDB container on port {port}");
+            }
+        }
+    }
+
+    wait_for_port(port, Duration::from_secs(30)).await?;
+    Ok(format!("http://localhost:{port}"))
+}
+
+/// Ensure a Memgraph container is running. Returns the Bolt URL.
+pub async fn ensure_memgraph(data_dir: &Path, instance: &str) -> Result<String> {
+    let container = format!("{MEMGRAPH_CONTAINER}-{instance}");
+    let storage_dir = data_dir.join(format!("memgraph_{instance}"));
+    std::fs::create_dir_all(&storage_dir)?;
+    let port = MEMGRAPH_BOLT_PORT + hash_offset(instance);
+
+    match inspect_container(&container) {
+        ContainerState::Running => {}
+        ContainerState::Stopped => { start_container(&container)?; }
+        ContainerState::NotFound => {
+            let status = Command::new("docker")
+                .args([
+                    "run", "-d", "--name", &container,
+                    "-p", &format!("{port}:7687"),
+                    "-v", &format!("{}:/var/lib/memgraph", storage_dir.canonicalize().unwrap_or(storage_dir).display()),
+                    MEMGRAPH_IMAGE,
+                ])
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::piped())
+                .status()?;
+            if !status.success() {
+                bail!("Failed to create Memgraph container on port {port}");
+            }
+        }
+    }
+
+    wait_for_port(port, Duration::from_secs(30)).await?;
+    Ok(format!("bolt://localhost:{port}"))
+}
+
+/// Ensure an ArangoDB container is running. Returns the HTTP URL.
+pub async fn ensure_arangodb(data_dir: &Path, instance: &str) -> Result<String> {
+    let container = format!("{ARANGODB_CONTAINER}-{instance}");
+    let storage_dir = data_dir.join(format!("arangodb_{instance}"));
+    std::fs::create_dir_all(&storage_dir)?;
+    let port = ARANGODB_PORT + hash_offset(instance);
+
+    match inspect_container(&container) {
+        ContainerState::Running => {}
+        ContainerState::Stopped => { start_container(&container)?; }
+        ContainerState::NotFound => {
+            let status = Command::new("docker")
+                .args([
+                    "run", "-d", "--name", &container,
+                    "-p", &format!("{port}:8529"),
+                    "-e", "ARANGO_NO_AUTH=1",
+                    "-v", &format!("{}:/var/lib/arangodb3", storage_dir.canonicalize().unwrap_or(storage_dir).display()),
+                    ARANGODB_IMAGE,
+                ])
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::piped())
+                .status()?;
+            if !status.success() {
+                bail!("Failed to create ArangoDB container on port {port}");
+            }
+        }
+    }
+
+    wait_for_port(port, Duration::from_secs(30)).await?;
+    Ok(format!("http://localhost:{port}"))
+}
+
+/// Ensure a SurrealDB container is running. Returns the HTTP URL.
+pub async fn ensure_surrealdb(data_dir: &Path, instance: &str) -> Result<String> {
+    let container = format!("{SURREALDB_CONTAINER}-{instance}");
+    let storage_dir = data_dir.join(format!("surrealdb_{instance}"));
+    std::fs::create_dir_all(&storage_dir)?;
+    let port = SURREALDB_PORT + hash_offset(instance);
+
+    match inspect_container(&container) {
+        ContainerState::Running => {}
+        ContainerState::Stopped => { start_container(&container)?; }
+        ContainerState::NotFound => {
+            let status = Command::new("docker")
+                .args([
+                    "run", "-d", "--name", &container,
+                    "-p", &format!("{port}:8000"),
+                    "-v", &format!("{}:/data", storage_dir.canonicalize().unwrap_or(storage_dir).display()),
+                    SURREALDB_IMAGE, "start", "--bind", "0.0.0.0:8000", "file:/data/synapse.db",
+                ])
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::piped())
+                .status()?;
+            if !status.success() {
+                bail!("Failed to create SurrealDB container on port {port}");
+            }
+        }
+    }
+
+    wait_for_port(port, Duration::from_secs(30)).await?;
+    Ok(format!("http://localhost:{port}"))
+}
+
+/// Compute a small port offset from an instance name to avoid collisions.
+fn hash_offset(instance: &str) -> u16 {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+    if instance == "default" {
+        return 0;
+    }
+    let mut hasher = DefaultHasher::new();
+    instance.hash(&mut hasher);
+    (hasher.finish() % 100) as u16
+}
+
 /// Poll a TCP port on localhost until it accepts connections.
 async fn wait_for_port(port: u16, timeout: Duration) -> Result<()> {
     let addr = std::net::SocketAddr::from(([127, 0, 0, 1], port));

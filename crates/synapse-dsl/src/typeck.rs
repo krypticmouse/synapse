@@ -371,6 +371,9 @@ fn check_expr(env: &mut TypeEnv, expr: &Expr) {
         Expr::InlineQuery(qb) => {
             check_query_body(env, qb);
         }
+        Expr::Alias { expr, .. } => {
+            check_expr(env, expr);
+        }
         // Literals and idents don't need recursive checking
         _ => {}
     }
@@ -401,7 +404,8 @@ fn infer_expr_type(env: &TypeEnv, expr: &Expr) -> Option<Type> {
             UnaryOp::Not => Some(Type::Bool),
             UnaryOp::Neg => infer_expr_type(env, operand),
         },
-        Expr::Call { .. } => None, // Can't infer without function signatures
+        Expr::Call { .. } => None,
+        Expr::Alias { expr, .. } => infer_expr_type(env, expr),
         Expr::Array(elems) => elems
             .first()
             .and_then(|e| infer_expr_type(env, e))

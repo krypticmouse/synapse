@@ -398,11 +398,26 @@ fn build_program_parser<'a>() -> impl Parser<'a, &'a [Token], Program, extra::Er
             )
             .boxed();
 
+        // alias: expr as name
+        let cmp_with_alias = cmp
+            .then(just(Token::As).ignore_then(ident()).or_not())
+            .map(|(expr, alias)| match alias {
+                Some(name) => Expr::Alias {
+                    expr: Box::new(expr),
+                    alias: name,
+                },
+                std::option::Option::None => expr,
+            })
+            .boxed();
+
         // logical AND
-        let and_expr = cmp
+        let and_expr = cmp_with_alias
             .clone()
             .foldl(
-                just(Token::And).to(BinOp::And).then(cmp).repeated(),
+                just(Token::And)
+                    .to(BinOp::And)
+                    .then(cmp_with_alias)
+                    .repeated(),
                 |l, (op, r)| Expr::Binary {
                     left: Box::new(l),
                     op,
@@ -503,10 +518,58 @@ fn build_program_parser<'a>() -> impl Parser<'a, &'a [Token], Program, extra::Er
         .delimited_by(just(Token::LBrace), just(Token::RBrace));
 
     // ─── Config ──────────────────────────────────────────────
-    let config_value = choice((
-        just(Token::Auto).to(ConfigValue::Auto),
+    let flat_config_value = choice((
+        just(Token::Auto)
+            .then(
+                select! { Token::StringLiteral(s) => s.clone() }
+                    .delimited_by(just(Token::LParen), just(Token::RParen))
+                    .or_not(),
+            )
+            .map(|(_, arg)| match arg {
+                Some(backend) => ConfigValue::FnCall {
+                    name: "auto".to_string(),
+                    arg: backend,
+                },
+                std::option::Option::None => ConfigValue::Auto,
+            }),
         just(Token::Embedded).to(ConfigValue::Auto),
         just(Token::None).to(ConfigValue::None),
+        any_name()
+            .then(
+                select! { Token::StringLiteral(s) => s.clone() }
+                    .delimited_by(just(Token::LParen), just(Token::RParen)),
+            )
+            .map(|(name, arg)| ConfigValue::FnCall { name, arg }),
+    ))
+    .boxed();
+
+    let config_dict = any_name()
+        .then_ignore(just(Token::Colon))
+        .then(flat_config_value.clone())
+        .separated_by(just(Token::Comma))
+        .allow_trailing()
+        .collect::<Vec<_>>()
+        .delimited_by(just(Token::LBrace), just(Token::RBrace))
+        .map(ConfigValue::Dict)
+        .boxed();
+
+    let config_value = choice((
+        just(Token::Auto)
+            .then(
+                select! { Token::StringLiteral(s) => s.clone() }
+                    .delimited_by(just(Token::LParen), just(Token::RParen))
+                    .or_not(),
+            )
+            .map(|(_, arg)| match arg {
+                Some(backend) => ConfigValue::FnCall {
+                    name: "auto".to_string(),
+                    arg: backend,
+                },
+                std::option::Option::None => ConfigValue::Auto,
+            }),
+        just(Token::Embedded).to(ConfigValue::Auto),
+        just(Token::None).to(ConfigValue::None),
+        config_dict,
         any_name()
             .then(
                 select! { Token::StringLiteral(s) => s.clone() }
@@ -1157,6 +1220,89 @@ mod tests {
         "#,
         );
         assert!(result.is_ok(), "error: {:?}", result.err());
+    }
+
+    #[test]
+    fn parse_config_with_dict() {
+        let result = parse(
+            r#"
+            config {
+                storage: sqlite("./test.db")
+                vector: {
+                    primary: auto("qdrant"),
+                    fast: chromadb("http://localhost:8000")
+                }
+                graph: {
+                    kg: auto("neo4j"),
+                    social: memgraph("bolt://localhost:7688")
+                }
+            }
+        "#,
+        );
+        assert!(result.is_ok(), "error: {:?}", result.err());
+        let prog = result.unwrap();
+        if let Item::Config(cfg) = &prog.items[0] {
+            assert_eq!(cfg.entries.len(), 3);
+            // vector should be a Dict
+            match &cfg.entries[1].value {
+                ConfigValue::Dict(entries) => {
+                    assert_eq!(entries.len(), 2);
+                    assert_eq!(entries[0].0, "primary");
+                    assert!(matches!(&entries[0].1, ConfigValue::FnCall { name, arg } if name == "auto" && arg == "qdrant"));
+                    assert_eq!(entries[1].0, "fast");
+                    assert!(matches!(&entries[1].1, ConfigValue::FnCall { name, .. } if name == "chromadb"));
+                }
+                other => panic!("expected Dict, got {:?}", other),
+            }
+            // graph should be a Dict
+            assert!(matches!(&cfg.entries[2].value, ConfigValue::Dict(_)));
+        } else {
+            panic!("expected Config");
+        }
+    }
+
+    #[test]
+    fn parse_query_with_alias() {
+        let result = parse(
+            r#"
+            memory Fact {
+                content: string
+            }
+            query Search(input: string): Fact[] {
+                from Fact
+                where semantic_match(input, threshold: 0.6) as sm
+                  and graph_match(input, hops: 2) as gm
+                order by (sm * 0.7 + gm * 0.3) desc
+                limit 10
+            }
+        "#,
+        );
+        assert!(result.is_ok(), "error: {:?}", result.err());
+        let prog = result.unwrap();
+        if let Item::Query(q) = &prog.items[1] {
+            assert_eq!(q.name, "Search");
+            // The where clause should contain Alias nodes
+            let wh = q.body.where_clause.as_ref().unwrap();
+            // Top level is And between two aliases
+            if let Expr::Binary { op: BinOp::And, left, right } = wh {
+                assert!(matches!(left.as_ref(), Expr::Alias { alias, .. } if alias == "sm"));
+                assert!(matches!(right.as_ref(), Expr::Alias { alias, .. } if alias == "gm"));
+            } else {
+                panic!("expected And binary, got {:?}", wh);
+            }
+            // Order by should be a complex expression
+            let ob = q.body.order_by.as_ref().unwrap();
+            assert!(matches!(&ob.expr, Expr::Binary { op: BinOp::Add, .. }));
+            assert_eq!(ob.direction, SortDir::Desc);
+        } else {
+            panic!("expected Query");
+        }
+    }
+
+    #[test]
+    fn parse_multi_backend_example() {
+        let result = parse(include_str!("../../../examples/multi_backend.mnm"));
+        assert!(result.is_ok(), "failed to parse multi_backend: {:?}", result.err());
     }
 
     #[test]
