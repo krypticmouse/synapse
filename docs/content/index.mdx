@@ -46,27 +46,27 @@ One file. Multi-backend storage. LLM-powered extraction. Semantic and graph sear
 
 ## Key Features
 
-import { Cards, Card } from 'nextra/components'
+import { Cards } from 'nextra/components'
 
 <Cards>
-  <Card title="Declarative DSL" href="/language/overview">
+  <Cards.Card title="Declarative DSL" href="/language/overview">
     Define memory schemas, handlers, queries, and update rules in `.mnm` files. No boilerplate.
-  </Card>
-  <Card title="Multi-Backend" href="/language/config">
+  </Cards.Card>
+  <Cards.Card title="Multi-Backend" href="/language/config">
     SQLite for relations, Qdrant/ChromaDB/Pinecone for vectors, Neo4j/Memgraph/ArangoDB/SurrealDB for graphs. Mix and match with named backends.
-  </Card>
-  <Card title="LLM Integration" href="/reference/builtins">
+  </Cards.Card>
+  <Cards.Card title="LLM Integration" href="/reference/builtins">
     Built-in `extract()` and `summarize()` powered by OpenAI. Extern functions let you define arbitrary LLM-simulated tools.
-  </Card>
-  <Card title="40+ Channel Connectors" href="/language/channels">
+  </Cards.Card>
+  <Cards.Card title="40+ Channel Connectors" href="/language/channels">
     Ingest data from Slack, Discord, Telegram, Reddit, Email, Webhooks, and dozens more. Each channel triggers ingest and update pipelines.
-  </Card>
-  <Card title="Temporal Updates" href="/language/updates">
+  </Cards.Card>
+  <Cards.Card title="Temporal Updates" href="/language/updates">
     Confidence decay, conflict resolution, periodic maintenance. Define how memory evolves over time.
-  </Card>
-  <Card title="Hybrid Queries" href="/language/queries">
+  </Cards.Card>
+  <Cards.Card title="Hybrid Queries" href="/language/queries">
     Combine semantic search, graph traversal, regex filters, and SQL in a single query. Score aliases let you build custom ranking formulas.
-  </Card>
+  </Cards.Card>
 </Cards>
 
 ## Quick Start

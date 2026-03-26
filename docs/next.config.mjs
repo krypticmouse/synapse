@@ -2,6 +2,7 @@ import nextra from 'nextra'
 import { readFileSync } from 'fs'
 import { resolve, dirname } from 'path'
 import { fileURLToPath } from 'url'
+import { createHighlighter } from 'shiki'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const mnmGrammar = JSON.parse(
@@ -9,28 +10,25 @@ const mnmGrammar = JSON.parse(
 )
 
 const withNextra = nextra({
-  theme: 'nextra-theme-docs',
-  themeConfig: './theme.config.tsx',
-  defaultShowCopyCode: true,
   latex: true,
+  defaultShowCopyCode: true,
+  search: {
+    codeblocks: true
+  },
   mdxOptions: {
     rehypePrettyCodeOptions: {
-      getHighlighter: async (options) => {
-        const { getHighlighter } = await import('shiki')
-        const highlighter = await getHighlighter({
+      getHighlighter: options =>
+        createHighlighter({
           ...options,
           langs: [
             ...(options.langs || []),
             {
-              id: 'mnm',
+              name: 'mnm',
               scopeName: 'source.mnm',
-              grammar: mnmGrammar,
-              aliases: ['mnm', 'synapse'],
+              ...mnmGrammar,
             },
           ],
-        })
-        return highlighter
-      },
+        }),
     },
   },
 })
