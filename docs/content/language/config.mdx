@@ -131,17 +131,17 @@ Both require the `OPENAI_API_KEY` environment variable to be set.
 
 When you use `auto` or `auto("backend_name")`, Synapse automatically spawns a Docker container for the backend:
 
-- **Qdrant**: Image `qdrant/qdrant`, ports 6333/6334, data in `.synapse/qdrant_storage`
-- **Neo4j**: Image `neo4j:latest`, ports 7687/7474, auth disabled, data in `.synapse/neo4j_data`
-- **ChromaDB**: Image `chromadb/chroma`, port 8000
-- **Memgraph**: Image `memgraph/memgraph`, port 7688
-- **ArangoDB**: Image `arangodb/arangodb`, port 8529
-- **SurrealDB**: Image `surrealdb/surrealdb`, port 8000
-- **Weaviate**: Image `semitechnologies/weaviate`, port 8080
+| Backend | Image | Port(s) | Notes |
+|---------|-------|---------|-------|
+| Qdrant | `qdrant/qdrant` | 6333, 6334 | Data in `.synapse/qdrant_storage` |
+| Neo4j | `neo4j:latest` | 7687, 7474 | Auth disabled, data in `.synapse/neo4j_data` |
+| ChromaDB | `chromadb/chroma` | 8000 | — |
+| Memgraph | `memgraph/memgraph` | 7688 | — |
+| ArangoDB | `arangodb/arangodb` | 8529 | — |
+| SurrealDB | `surrealdb/surrealdb` | 8000 | — |
+| Weaviate | `semitechnologies/weaviate` | 8080 | — |
 
 If the container already exists but is stopped, Synapse restarts it. The runtime waits for the service to be reachable before proceeding.
-
-import { Callout } from 'nextra/components'
 
 <Callout type="info">
   Auto-spawn requires Docker to be installed and running. If Docker is not available, Synapse will report an error.

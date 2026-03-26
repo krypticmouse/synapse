@@ -68,8 +68,6 @@ on archive_request(content: string, source: string) {
 
 ## Best Practices
 
-import { Callout } from 'nextra/components'
-
 <Callout type="warning">
   Extern functions rely on LLM inference, which means they are non-deterministic and may produce incorrect results. Use them for best-effort operations, not for critical logic.
 </Callout>
