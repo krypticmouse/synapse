@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "crates/synapse-dsl",
     "crates/synapse-runtime",
+    "crates/synapse-channels",
     "crates/synapse-cli",
     "crates/synapse-client",
 ]
@@ -42,6 +43,9 @@ chrono = { version = "0.4", features = ["serde"] }
 # Error handling
 thiserror = "2"
 anyhow = "1"
+
+# Async utilities
+async-trait = "0.1"
 
 # CLI
 clap = { version = "4", features = ["derive"] }

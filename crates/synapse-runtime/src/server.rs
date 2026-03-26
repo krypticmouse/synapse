@@ -66,6 +66,7 @@ struct StatusResponse {
     handlers: Vec<String>,
     queries: Vec<String>,
     memories: Vec<String>,
+    channels: Vec<String>,
     uptime_secs: i64,
 }
 
@@ -107,6 +108,11 @@ async fn status(State(state): State<AppState>) -> impl IntoResponse {
             .collect(),
         memories: rt
             .memory_names()
+            .into_iter()
+            .map(|s| s.to_string())
+            .collect(),
+        channels: rt
+            .channel_names()
             .into_iter()
             .map(|s| s.to_string())
             .collect(),

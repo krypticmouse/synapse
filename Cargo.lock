@@ -2458,10 +2458,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "synapse-channels"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "serde",
+ "serde_json",
+ "synapse-dsl",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "synapse-cli"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "axum 0.8.8",
  "clap",
  "serde",
  "serde_json",
@@ -2511,6 +2527,7 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
+ "synapse-channels",
  "synapse-dsl",
  "thiserror 2.0.18",
  "tokio",

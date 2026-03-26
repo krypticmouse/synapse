@@ -1,0 +1,18 @@
+[package]
+name = "synapse-channels"
+version = "0.1.0"
+edition = "2021"
+description = "Channel connectors for Synapse - ingest data from messaging platforms, social networks, and webhooks"
+license = "MIT"
+repository = "https://github.com/krypticmouse/synapse"
+
+[dependencies]
+synapse-dsl = { path = "../synapse-dsl", version = "0.1.0" }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+tracing = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+async-trait = { workspace = true }

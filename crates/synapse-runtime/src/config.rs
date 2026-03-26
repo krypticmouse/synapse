@@ -2,7 +2,8 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
-use synapse_dsl::ast::{ConfigBlock, ConfigValue};
+use synapse_channels::ConnectorConfig;
+use synapse_dsl::ast::{ChannelDef, ConfigBlock, ConfigValue};
 
 /// Runtime configuration parsed from the DSL config block.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -12,8 +13,16 @@ pub struct RuntimeConfig {
     pub graphs: HashMap<String, GraphConfig>,
     pub embedding: Option<EmbeddingConfig>,
     pub extractor: Option<ExtractorConfig>,
+    pub channels: HashMap<String, ChannelRuntimeConfig>,
     pub host: String,
     pub port: u16,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChannelRuntimeConfig {
+    pub source: String,
+    pub config: ConnectorConfig,
+    pub poll_interval_secs: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -54,6 +63,7 @@ impl Default for RuntimeConfig {
             graphs: HashMap::new(),
             embedding: None,
             extractor: None,
+            channels: HashMap::new(),
             host: "localhost".into(),
             port: 8080,
         }
@@ -156,5 +166,37 @@ impl RuntimeConfig {
         }
 
         cfg
+    }
+
+    pub fn add_channel_from_def(&mut self, def: &ChannelDef) {
+        let mut connector_config = ConnectorConfig::new();
+        for entry in &def.config {
+            let value_str = match &entry.value {
+                ConfigValue::FnCall { name, arg } => {
+                    if name == "env" {
+                        std::env::var(arg).unwrap_or_default()
+                    } else {
+                        format!("{}({})", name, arg)
+                    }
+                }
+                _ => String::new(),
+            };
+            connector_config.set(&entry.key, value_str);
+        }
+
+        let poll_interval_secs = def
+            .poll_interval
+            .as_ref()
+            .map(|d| d.to_secs())
+            .unwrap_or(300); // default 5 minutes
+
+        self.channels.insert(
+            def.name.clone(),
+            ChannelRuntimeConfig {
+                source: def.source.clone(),
+                config: connector_config,
+                poll_interval_secs,
+            },
+        );
     }
 }

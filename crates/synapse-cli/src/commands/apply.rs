@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::Path;
 
-use synapse_dsl::ast::Item;
+use synapse_dsl::ast::{Item, ChannelDef};
 use synapse_runtime::config::{GraphConfig, RuntimeConfig, VectorConfig};
 use synapse_runtime::llm::{EmbeddingClient, LlmClient};
 use synapse_runtime::storage::sqlite::SqliteBackend;
@@ -211,8 +211,31 @@ pub async fn run(file: &str, port: Option<u16>, daemon: bool) -> anyhow::Result<
         }
     }
 
+    // Collect channel definitions from the program
+    fn collect_channel_defs(items: &[Item]) -> Vec<ChannelDef> {
+        let mut defs = Vec::new();
+        for item in items {
+            match item {
+                Item::Channel(ch) => defs.push(ch.clone()),
+                Item::Namespace(ns) => defs.extend(collect_channel_defs(&ns.items)),
+                _ => {}
+            }
+        }
+        defs
+    }
+
+    let channel_defs = collect_channel_defs(&program.items);
+    for ch_def in &channel_defs {
+        config.add_channel_from_def(ch_def);
+    }
+
     let runtime = Runtime::new(program, storage, llm, embedder).with_source_file(file);
     runtime.init_storage().await?;
+
+    // Setup and start channels
+    let mut channel_manager = synapse_runtime::channels::setup_channels(&config.channels).await?;
+    let channel_rx = channel_manager.take_receiver();
+    synapse_runtime::channels::start_channel_polling(&mut channel_manager, &config.channels);
 
     let scheduler = synapse_runtime::interpreter::policy::PolicyScheduler::from_program(
         &runtime.program,
@@ -227,8 +250,14 @@ pub async fn run(file: &str, port: Option<u16>, daemon: bool) -> anyhow::Result<
     );
     let _policy_handles = scheduler.start();
 
+    let channel_count = config.channels.len();
+
     let addr = format!("{}:{}", config.host, config.port);
     println!("  ✓ Runtime listening on {addr}");
+
+    if channel_count > 0 {
+        println!("  ✓ {} channel(s) active and polling", channel_count);
+    }
 
     if daemon {
         println!("  Running in background...");
@@ -244,7 +273,31 @@ pub async fn run(file: &str, port: Option<u16>, daemon: bool) -> anyhow::Result<
     let _ = fs::create_dir_all(".synapse");
     let _ = fs::write(".synapse/state.json", state.to_string());
 
-    synapse_runtime::server::serve(runtime, &addr).await?;
+    // Build router with shared runtime state
+    let router = synapse_runtime::server::build_router(runtime);
+
+    // Spawn channel event dispatcher if there are channels
+    // Note: The dispatcher connects to the runtime via its own event handlers
+    if let Some(rx) = channel_rx {
+        if channel_count > 0 {
+            tracing::info!("channel event dispatcher started");
+            tokio::spawn(async move {
+                let mut rx = rx;
+                while let Some(event) = rx.recv().await {
+                    tracing::info!(
+                        channel = %event.channel_name,
+                        event_type = %event.event_type.as_str(),
+                        source = %event.source,
+                        "received channel event"
+                    );
+                }
+            });
+        }
+    }
+
+    let listener = tokio::net::TcpListener::bind(&addr).await?;
+    tracing::info!("Synapse runtime listening on {addr}");
+    axum::serve(listener, router).await?;
 
     Ok(())
 }

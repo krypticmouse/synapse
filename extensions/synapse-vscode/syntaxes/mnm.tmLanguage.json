@@ -9,7 +9,8 @@
     { "include": "#literals" },
     { "include": "#operators" },
     { "include": "#decorators" },
-    { "include": "#builtins" }
+    { "include": "#builtins" },
+    { "include": "#channels" }
   ],
   "repository": {
     "comments": {
@@ -47,11 +48,11 @@
     "keywords": {
       "patterns": [
         {
-          "match": "\\b(config|memory|namespace|query|update|on|fn|policy)\\b",
+          "match": "\\b(config|memory|namespace|query|update|on|fn|policy|channel)\\b",
           "name": "keyword.control.mnm"
         },
         {
-          "match": "\\b(if|else|let|mut|return|for|in|none)\\b",
+          "match": "\\b(if|else|let|mut|return|for|in|none|as|auto|embedded)\\b",
           "name": "keyword.control.flow.mnm"
         },
         {
@@ -127,8 +128,24 @@
     "builtins": {
       "patterns": [
         {
-          "match": "\\b(store|now|supersede|discard|delete|emit|extract|map|filter|each|semantic_match|regex|graph_match|cypher|sql|summarize|extract_preferences|extract_expertise|extract_topics)\\b",
+          "match": "\\b(store|now|supersede|discard|delete|archive|emit|extract|map|filter|each|group_by|store_as|delete_originals|semantic_match|regex|graph_match|cypher|sql|summarize|len|min|max|env)\\b",
           "name": "support.function.builtin.mnm"
+        }
+      ]
+    },
+    "channels": {
+      "patterns": [
+        {
+          "match": "\\b(source|poll_interval)\\b(?=\\s*:)",
+          "name": "keyword.other.channel.mnm"
+        },
+        {
+          "match": "\\b(telegram|discord|slack|whatsapp|signal|matrix|email|teams|microsoft_teams|mattermost|google_chat|webex|feishu|lark|rocketchat|rocket_chat|zulip|xmpp|line|viber|messenger|facebook_messenger|mastodon|bluesky|reddit|linkedin|twitch|irc|guilded|revolt|keybase|discourse|gitter|nextcloud_talk|nextcloud|threema|nostr|mumble|pumble|flock|twist|dingtalk|ntfy|gotify|webhook)\\b",
+          "name": "support.constant.connector.mnm"
+        },
+        {
+          "match": "\\b(message|edit|reaction|thread_reply|file_upload|member_join|member_leave)\\b",
+          "name": "variable.other.event.mnm"
         }
       ]
     }

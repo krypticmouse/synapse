@@ -13,6 +13,9 @@ pub enum Token {
     #[token("config")]
     Config,
 
+    #[token("channel")]
+    Channel,
+
     #[token("memory")]
     Memory,
 
@@ -289,6 +292,7 @@ impl fmt::Display for Token {
         match self {
             Token::Comment => unreachable!("comments are skipped"),
             Token::Config => write!(f, "config"),
+            Token::Channel => write!(f, "channel"),
             Token::Memory => write!(f, "memory"),
             Token::Namespace => write!(f, "namespace"),
             Token::Query => write!(f, "query"),

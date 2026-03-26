@@ -43,6 +43,14 @@ fn print_item_plan(item: &synapse_dsl::ast::Item, indent: &str) {
                 print_item_plan(item, &format!("{indent}  "));
             }
         }
+        synapse_dsl::ast::Item::Channel(ch) => {
+            println!(
+                "{indent}+ channel {} (source: {}, {} event handlers)",
+                ch.name,
+                ch.source,
+                ch.events.len()
+            );
+        }
         synapse_dsl::ast::Item::Config(_) => {
             println!("{indent}~ config block");
         }

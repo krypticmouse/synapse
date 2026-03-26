@@ -12,6 +12,7 @@ pub struct Program {
 #[derive(Debug, Clone)]
 pub enum Item {
     Config(ConfigBlock),
+    Channel(ChannelDef),
     Namespace(NamespaceDef),
     Memory(MemoryDef),
     Handler(HandlerDef),
@@ -42,6 +43,27 @@ pub enum ConfigValue {
     None,
     Auto,
     Dict(Vec<(String, ConfigValue)>),
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CHANNEL
+// ═══════════════════════════════════════════════════════════════
+
+#[derive(Debug, Clone)]
+pub struct ChannelDef {
+    pub name: String,
+    pub source: String,
+    pub config: Vec<ConfigEntry>,
+    pub poll_interval: Option<Duration>,
+    pub events: Vec<ChannelEventHandler>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ChannelEventHandler {
+    pub event: String,
+    pub target: Option<String>,
+    pub params: Vec<Param>,
+    pub body: Vec<Stmt>,
 }
 
 // ═══════════════════════════════════════════════════════════════

@@ -1,0 +1,161 @@
+# channels.mnm
+# Multi-channel ingestion with update support
+# Demonstrates ingesting data from multiple messaging platforms
+
+config {
+  storage: sqlite("./data/channels.db")
+  vector: auto("qdrant")
+  graph: auto("neo4j")
+  embedding: openai("text-embedding-3-small")
+  extractor: openai("gpt-4o-mini")
+}
+
+namespace team_memory {
+
+  memory Message {
+    content: string
+    author: string
+    source: string
+    channel: string
+    message_id: string?
+    subject: string
+    predicate: string
+    object: string
+    confidence: float[0,1]
+    created_at: timestamp
+
+    @index source
+    @index author
+    @index subject
+    @index predicate
+  }
+
+  # ─── Slack Channel ─────────────────────────────────────────
+
+  channel slack_feed {
+    source: slack
+    config {
+      token: env("SLACK_TOKEN")
+    }
+    poll_interval: 5m
+
+    on message -> ingest(content: string, author: string) {
+      content
+        |> extract()
+        |> store()
+    }
+
+    on edit -> update(content: string, message_id: string) {
+      content
+        |> extract()
+        |> store()
+    }
+
+    on delete(message_id: string) {
+      let msg = from Message
+        where message_id == message_id
+        limit 1
+    }
+  }
+
+  # ─── Discord Channel ───────────────────────────────────────
+
+  channel discord_feed {
+    source: discord
+    config {
+      token: env("DISCORD_TOKEN")
+    }
+    poll_interval: 5m
+
+    on message -> ingest(content: string, author: string) {
+      content
+        |> extract()
+        |> store()
+    }
+
+    on edit -> update(content: string) {
+      content
+        |> extract()
+        |> store()
+    }
+  }
+
+  # ─── Telegram Channel ──────────────────────────────────────
+
+  channel telegram_feed {
+    source: telegram
+    config {
+      token: env("TELEGRAM_BOT_TOKEN")
+    }
+    poll_interval: 1m
+
+    on message -> ingest(content: string, author: string) {
+      content
+        |> extract()
+        |> store()
+    }
+
+    on edit -> update(content: string) {
+      content
+        |> extract()
+        |> store()
+    }
+  }
+
+  # ─── Webhook (generic) ─────────────────────────────────────
+
+  channel webhook_feed {
+    source: webhook
+    config {
+      endpoint: env("WEBHOOK_URL")
+    }
+    poll_interval: 30s
+
+    on message -> ingest(content: string) {
+      content
+        |> extract()
+        |> store()
+    }
+  }
+
+  # ─── Queries ────────────────────────────────────────────────
+
+  on ingest(content: string) {
+    content
+      |> extract()
+      |> store()
+  }
+
+  query Search(input: string): Message[] {
+    from Message
+    where semantic_match(input, threshold: 0.5)
+    order by created_at desc
+    limit 20
+  }
+
+  query BySource(source: string): Message[] {
+    from Message
+    where source == source
+    order by created_at desc
+    limit 50
+  }
+
+  query ByAuthor(author: string): Message[] {
+    from Message
+    where author == author
+    order by created_at desc
+    limit 50
+  }
+
+  # ─── Update Rules ──────────────────────────────────────────
+
+  update Message {
+    on_conflict(old, new) {
+      if new.confidence > old.confidence {
+        supersede(old, new)
+      } else {
+        discard(new)
+      }
+    }
+  }
+}

@@ -15,6 +15,8 @@ pub struct TypeEnv {
     handlers: HashMap<String, Vec<(String, Type)>>,
     /// extern_fn_name -> (params, return_type)
     extern_fns: HashMap<String, (Vec<(String, Type)>, Option<Type>)>,
+    /// channel_name -> source_type
+    channels: HashMap<String, String>,
     /// Local variable scope stack
     scopes: Vec<HashMap<String, Type>>,
     /// Errors accumulated during type checking
@@ -111,6 +113,9 @@ fn register_items(env: &mut TypeEnv, items: &[Item]) {
                 env.extern_fns
                     .insert(ef.name.clone(), (params, ef.return_ty.clone()));
             }
+            Item::Channel(ch) => {
+                env.channels.insert(ch.name.clone(), ch.source.clone());
+            }
             Item::Namespace(ns) => {
                 register_items(env, &ns.items);
             }
@@ -156,6 +161,22 @@ fn check_items(env: &mut TypeEnv, items: &[Item]) {
             }
             Item::Memory(mem) => {
                 check_memory(env, mem);
+            }
+            Item::Channel(ch) => {
+                if ch.source.is_empty() {
+                    env.error(format!(
+                        "channel '{}' is missing a source declaration",
+                        ch.name
+                    ));
+                }
+                for event_handler in &ch.events {
+                    env.push_scope();
+                    for p in &event_handler.params {
+                        env.define_local(&p.name, p.ty.clone());
+                    }
+                    check_stmts(env, &event_handler.body);
+                    env.pop_scope();
+                }
             }
             Item::Namespace(ns) => {
                 check_items(env, &ns.items);

@@ -35,6 +35,7 @@ pub fn run(file: &str) -> anyhow::Result<()> {
     let mut updates = 0;
     let mut policies = 0;
     let mut extern_fns = 0;
+    let mut channels = 0;
 
     count_items(
         &program.items,
@@ -44,11 +45,12 @@ pub fn run(file: &str) -> anyhow::Result<()> {
         &mut updates,
         &mut policies,
         &mut extern_fns,
+        &mut channels,
     );
 
     println!(
-        "  ✓ {} memories, {} handlers, {} queries, {} update rules, {} policies, {} extern fns",
-        memories, handlers, queries, updates, policies, extern_fns
+        "  ✓ {} memories, {} handlers, {} queries, {} update rules, {} policies, {} extern fns, {} channels",
+        memories, handlers, queries, updates, policies, extern_fns, channels
     );
 
     Ok(())
@@ -62,6 +64,7 @@ fn count_items(
     updates: &mut usize,
     policies: &mut usize,
     extern_fns: &mut usize,
+    channels: &mut usize,
 ) {
     for item in items {
         match item {
@@ -71,9 +74,10 @@ fn count_items(
             synapse_dsl::ast::Item::Update(_) => *updates += 1,
             synapse_dsl::ast::Item::Policy(_) => *policies += 1,
             synapse_dsl::ast::Item::ExternFn(_) => *extern_fns += 1,
+            synapse_dsl::ast::Item::Channel(_) => *channels += 1,
             synapse_dsl::ast::Item::Namespace(ns) => {
                 count_items(
-                    &ns.items, memories, handlers, queries, updates, policies, extern_fns,
+                    &ns.items, memories, handlers, queries, updates, policies, extern_fns, channels,
                 );
             }
             synapse_dsl::ast::Item::Config(_) => {}

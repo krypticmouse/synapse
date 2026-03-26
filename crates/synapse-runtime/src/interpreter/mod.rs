@@ -30,6 +30,8 @@ pub struct Runtime {
     /// Memory definitions: type_name -> full MemoryDef (fields, indexes, invariants)
     pub memories: Arc<HashMap<String, MemoryDef>>,
     pub extern_fns: Arc<HashMap<String, ExternFnDef>>,
+    /// Channel definitions indexed by channel name
+    pub channels: Arc<HashMap<String, ChannelDef>>,
     /// Path to the .mnm source file (for hot reload)
     pub source_file: Option<String>,
     /// Runtime state: counters, stats, etc.
@@ -56,6 +58,7 @@ impl Runtime {
         let mut updates = HashMap::new();
         let mut memories = HashMap::new();
         let mut extern_fns = HashMap::new();
+        let mut channels = HashMap::new();
 
         collect_definitions(
             &program.items,
@@ -64,6 +67,7 @@ impl Runtime {
             &mut updates,
             &mut memories,
             &mut extern_fns,
+            &mut channels,
         );
 
         Self {
@@ -76,6 +80,7 @@ impl Runtime {
             updates: Arc::new(updates),
             memories: Arc::new(memories),
             extern_fns: Arc::new(extern_fns),
+            channels: Arc::new(channels),
             source_file: None,
             stats: Arc::new(RwLock::new(RuntimeStats {
                 started_at: Some(Utc::now()),
@@ -106,6 +111,7 @@ impl Runtime {
         let mut updates = HashMap::new();
         let mut memories = HashMap::new();
         let mut extern_fns = HashMap::new();
+        let mut channels = HashMap::new();
 
         collect_definitions(
             &program.items,
@@ -114,6 +120,7 @@ impl Runtime {
             &mut updates,
             &mut memories,
             &mut extern_fns,
+            &mut channels,
         );
 
         self.program = program;
@@ -122,6 +129,7 @@ impl Runtime {
         self.updates = Arc::new(updates);
         self.memories = Arc::new(memories);
         self.extern_fns = Arc::new(extern_fns);
+        self.channels = Arc::new(channels);
 
         tracing::info!(file = %path, "runtime reloaded successfully");
         Ok(())
@@ -242,6 +250,11 @@ impl Runtime {
     pub fn memory_names(&self) -> Vec<&str> {
         self.memories.keys().map(|s| s.as_str()).collect()
     }
+
+    /// Get channel names
+    pub fn channel_names(&self) -> Vec<&str> {
+        self.channels.keys().map(|s| s.as_str()).collect()
+    }
 }
 
 /// Execution environment — holds variable bindings and storage access for
@@ -327,6 +340,7 @@ fn collect_definitions(
     updates: &mut HashMap<String, UpdateDef>,
     memories: &mut HashMap<String, MemoryDef>,
     extern_fns: &mut HashMap<String, ExternFnDef>,
+    channels: &mut HashMap<String, ChannelDef>,
 ) {
     for item in items {
         match item {
@@ -345,8 +359,11 @@ fn collect_definitions(
             Item::ExternFn(ef) => {
                 extern_fns.insert(ef.name.clone(), ef.clone());
             }
+            Item::Channel(ch) => {
+                channels.insert(ch.name.clone(), ch.clone());
+            }
             Item::Namespace(ns) => {
-                collect_definitions(&ns.items, handlers, queries, updates, memories, extern_fns);
+                collect_definitions(&ns.items, handlers, queries, updates, memories, extern_fns, channels);
             }
             _ => {}
         }

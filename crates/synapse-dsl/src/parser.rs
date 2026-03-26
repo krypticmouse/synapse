@@ -52,6 +52,7 @@ fn any_name<'a>() -> impl Parser<'a, &'a [Token], String, extra::Err<Rich<'a, To
         Token::TyBool => "bool".to_string(),
         Token::TyTimestamp => "timestamp".to_string(),
         Token::Memory => "memory".to_string(),
+        Token::Channel => "channel".to_string(),
         Token::Query => "query".to_string(),
         Token::Update => "update".to_string(),
         Token::From => "from".to_string(),
@@ -582,7 +583,7 @@ fn build_program_parser<'a>() -> impl Parser<'a, &'a [Token], Program, extra::Er
         .ignore_then(
             any_name()
                 .then_ignore(just(Token::Colon))
-                .then(config_value)
+                .then(config_value.clone())
                 .map(|(key, value)| ConfigEntry { key, value })
                 .repeated()
                 .collect::<Vec<_>>()
@@ -793,8 +794,83 @@ fn build_program_parser<'a>() -> impl Parser<'a, &'a [Token], Program, extra::Er
         })
         .boxed();
 
+    // ─── Channel ──────────────────────────────────────────────
+    let channel_config_entry = any_name()
+        .then_ignore(just(Token::Colon))
+        .then(config_value.clone())
+        .map(|(key, value)| ConfigEntry { key, value });
+
+    let channel_event_handler = just(Token::On)
+        .ignore_then(any_name())
+        .then(
+            just(Token::Arrow)
+                .ignore_then(any_name())
+                .or_not(),
+        )
+        .then(params().delimited_by(just(Token::LParen), just(Token::RParen)))
+        .then(stmts_block.clone())
+        .map(|(((event, target), params), body)| {
+            ChannelEventHandler {
+                event,
+                target,
+                params,
+                body,
+            }
+        });
+
+    let channel_member = choice((
+        just(Token::Ident("source".to_string()))
+            .ignore_then(just(Token::Colon))
+            .ignore_then(any_name())
+            .map(ChannelMember::Source),
+        just(Token::Ident("poll_interval".to_string()))
+            .ignore_then(just(Token::Colon))
+            .ignore_then(duration())
+            .map(ChannelMember::PollInterval),
+        just(Token::Config)
+            .ignore_then(
+                channel_config_entry
+                    .repeated()
+                    .collect::<Vec<_>>()
+                    .delimited_by(just(Token::LBrace), just(Token::RBrace)),
+            )
+            .map(ChannelMember::Config),
+        channel_event_handler.map(ChannelMember::Event),
+    ));
+
+    let channel = just(Token::Channel)
+        .ignore_then(ident())
+        .then(
+            channel_member
+                .repeated()
+                .collect::<Vec<_>>()
+                .delimited_by(just(Token::LBrace), just(Token::RBrace)),
+        )
+        .map(|(name, members)| {
+            let mut source = String::new();
+            let mut config_entries = Vec::new();
+            let mut poll_interval = None;
+            let mut events = Vec::new();
+            for m in members {
+                match m {
+                    ChannelMember::Source(s) => source = s,
+                    ChannelMember::Config(entries) => config_entries = entries,
+                    ChannelMember::PollInterval(d) => poll_interval = Some(d),
+                    ChannelMember::Event(e) => events.push(e),
+                }
+            }
+            Item::Channel(ChannelDef {
+                name,
+                source,
+                config: config_entries,
+                poll_interval,
+                events,
+            })
+        })
+        .boxed();
+
     // ─── Item (any top-level construct) ──────────────────────
-    let item = choice((config, memory, handler, query, update, policy, extern_fn)).boxed();
+    let item = choice((config, channel, memory, handler, query, update, policy, extern_fn)).boxed();
 
     // ─── Namespace or bare item ──────────────────────────────
     let ns_or_item = just(Token::Namespace)
@@ -830,6 +906,15 @@ enum MemoryMember {
     Field(FieldDef),
     Index(String),
     Invariant(Expr),
+}
+
+/// Channel block member
+#[derive(Debug, Clone)]
+enum ChannelMember {
+    Source(String),
+    Config(Vec<ConfigEntry>),
+    PollInterval(Duration),
+    Event(ChannelEventHandler),
 }
 
 #[cfg(test)]
@@ -1318,5 +1403,112 @@ mod tests {
         "#,
         );
         assert!(result.is_ok(), "error: {:?}", result.err());
+    }
+
+    #[test]
+    fn parse_channel_basic() {
+        let result = parse(
+            r#"
+            channel slack_feed {
+                source: slack
+                config {
+                    token: env("SLACK_TOKEN")
+                }
+                poll_interval: 5m
+
+                on message -> ingest(content: string) {
+                    content
+                        |> extract()
+                        |> store()
+                }
+
+                on edit -> update(content: string) {
+                    content
+                        |> extract()
+                        |> store()
+                }
+            }
+        "#,
+        );
+        assert!(result.is_ok(), "error: {:?}", result.err());
+        let prog = result.unwrap();
+        if let Item::Channel(ch) = &prog.items[0] {
+            assert_eq!(ch.name, "slack_feed");
+            assert_eq!(ch.source, "slack");
+            assert_eq!(ch.config.len(), 1);
+            assert_eq!(ch.config[0].key, "token");
+            assert!(ch.poll_interval.is_some());
+            assert_eq!(ch.events.len(), 2);
+            assert_eq!(ch.events[0].event, "message");
+            assert_eq!(ch.events[0].target.as_deref(), Some("ingest"));
+            assert_eq!(ch.events[1].event, "edit");
+            assert_eq!(ch.events[1].target.as_deref(), Some("update"));
+        } else {
+            panic!("expected Channel");
+        }
+    }
+
+    #[test]
+    fn parse_channel_no_target() {
+        let result = parse(
+            r#"
+            channel webhook_feed {
+                source: webhook
+                config {
+                    endpoint: env("WEBHOOK_URL")
+                }
+
+                on message(content: string) {
+                    content |> store()
+                }
+            }
+        "#,
+        );
+        assert!(result.is_ok(), "error: {:?}", result.err());
+        let prog = result.unwrap();
+        if let Item::Channel(ch) = &prog.items[0] {
+            assert_eq!(ch.name, "webhook_feed");
+            assert_eq!(ch.source, "webhook");
+            assert_eq!(ch.events.len(), 1);
+            assert!(ch.events[0].target.is_none());
+            assert!(ch.poll_interval.is_none());
+        } else {
+            panic!("expected Channel");
+        }
+    }
+
+    #[test]
+    fn parse_channel_in_namespace() {
+        let result = parse(
+            r#"
+            namespace team {
+                channel discord_feed {
+                    source: discord
+                    config {
+                        token: env("DISCORD_TOKEN")
+                    }
+                    poll_interval: 1m
+
+                    on message -> ingest(content: string) {
+                        content |> extract() |> store()
+                    }
+                }
+            }
+        "#,
+        );
+        assert!(result.is_ok(), "error: {:?}", result.err());
+        let prog = result.unwrap();
+        if let Item::Namespace(ns) = &prog.items[0] {
+            assert_eq!(ns.items.len(), 1);
+            assert!(matches!(&ns.items[0], Item::Channel(_)));
+        } else {
+            panic!("expected Namespace");
+        }
+    }
+
+    #[test]
+    fn parse_channels_example() {
+        let result = parse(include_str!("../../../examples/channels.mnm"));
+        assert!(result.is_ok(), "failed to parse channels.mnm: {:?}", result.err());
     }
 }
