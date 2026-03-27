@@ -10,7 +10,7 @@ function formatCount(n: number): string {
   return String(n)
 }
 
-const repoShortName = GITHUB_REPO.split('/')[1] ?? GITHUB_REPO
+const repoShortName = GITHUB_REPO
 
 export function GitHubHeaderLink() {
   const [stats, setStats] = useState<{ stars: number; forks: number } | null>(null)
