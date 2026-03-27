@@ -10,11 +10,21 @@ export interface NavSection {
 
 export type NavEntry = NavItem | NavSection
 
-export const navigation: NavEntry[] = [
-  { title: 'Introduction', href: '/' },
-  { title: 'Getting Started', href: '/getting-started' },
+export interface HeaderTab {
+  title: string
+  href: string
+  /** pathname prefix used to determine active state (e.g. "/language") */
+  prefix: string
+  items?: NavItem[]
+}
+
+export const tabs: HeaderTab[] = [
+  { title: 'Home', href: '/', prefix: '/' },
+  { title: 'Getting Started', href: '/getting-started', prefix: '/getting-started' },
   {
     title: 'Language Guide',
+    href: '/language/overview',
+    prefix: '/language',
     items: [
       { title: 'Overview', href: '/language/overview' },
       { title: 'Config Block', href: '/language/config' },
@@ -31,6 +41,8 @@ export const navigation: NavEntry[] = [
   },
   {
     title: 'Tutorials',
+    href: '/tutorials/hello-world',
+    prefix: '/tutorials',
     items: [
       { title: 'Hello World', href: '/tutorials/hello-world' },
       { title: 'Building a Fact Memory', href: '/tutorials/fact-memory' },
@@ -42,6 +54,8 @@ export const navigation: NavEntry[] = [
   },
   {
     title: 'Examples',
+    href: '/examples/hello',
+    prefix: '/examples',
     items: [
       { title: 'Hello World', href: '/examples/hello' },
       { title: 'Agent Facts', href: '/examples/agent-facts' },
@@ -56,6 +70,8 @@ export const navigation: NavEntry[] = [
   },
   {
     title: 'Reference',
+    href: '/reference/cli',
+    prefix: '/reference',
     items: [
       { title: 'CLI Commands', href: '/reference/cli' },
       { title: 'Built-in Functions', href: '/reference/builtins' },
@@ -64,5 +80,27 @@ export const navigation: NavEntry[] = [
       { title: 'Channel Connectors', href: '/reference/connectors' },
       { title: 'SDKs', href: '/reference/sdks' },
     ],
+  },
+]
+
+/** Flat navigation used by the old sidebar — kept for compatibility */
+export const navigation: NavEntry[] = [
+  { title: 'Introduction', href: '/' },
+  { title: 'Getting Started', href: '/getting-started' },
+  {
+    title: 'Language Guide',
+    items: tabs.find((t) => t.prefix === '/language')!.items!,
+  },
+  {
+    title: 'Tutorials',
+    items: tabs.find((t) => t.prefix === '/tutorials')!.items!,
+  },
+  {
+    title: 'Examples',
+    items: tabs.find((t) => t.prefix === '/examples')!.items!,
+  },
+  {
+    title: 'Reference',
+    items: tabs.find((t) => t.prefix === '/reference')!.items!,
   },
 ]

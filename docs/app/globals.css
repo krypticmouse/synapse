@@ -4,27 +4,29 @@
 
 @layer base {
   :root {
-    --background: 36 33% 99%;
-    --foreground: 20 20% 14%;
-    --muted: 30 20% 95%;
-    --muted-foreground: 20 8% 42%;
-    --border: 30 15% 88%;
-    --accent: 28 30% 95%;
-    --accent-foreground: 20 20% 14%;
-    --primary: 24 95% 50%;
+    --background: 40 25% 98.5%;
+    --foreground: 24 10% 10%;
+    --muted: 36 18% 94%;
+    --muted-foreground: 24 6% 44%;
+    --border: 36 14% 89%;
+    --accent: 36 20% 94.5%;
+    --accent-foreground: 24 10% 10%;
+    --primary: 24 90% 48%;
     --primary-foreground: 0 0% 100%;
+    --surface: 36 25% 96%;
   }
 
   .dark {
-    --background: 20 14% 4%;
-    --foreground: 30 10% 93%;
-    --muted: 20 8% 10%;
-    --muted-foreground: 30 5% 50%;
-    --border: 20 6% 15%;
-    --accent: 20 8% 12%;
-    --accent-foreground: 30 10% 93%;
-    --primary: 24 92% 58%;
-    --primary-foreground: 20 14% 4%;
+    --background: 24 10% 4%;
+    --foreground: 36 10% 91%;
+    --muted: 24 6% 9%;
+    --muted-foreground: 36 4% 48%;
+    --border: 24 5% 13%;
+    --accent: 24 6% 10%;
+    --accent-foreground: 36 10% 91%;
+    --primary: 24 88% 55%;
+    --primary-foreground: 24 10% 4%;
+    --surface: 24 6% 7%;
   }
 }
 
@@ -41,22 +43,23 @@
     scroll-behavior: smooth;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
   }
 }
 
-/* ── Prose overrides ─────────────────────────────── */
+/* ── Prose ────────────────────────────────────────── */
 
 .prose {
-  --tw-prose-body: hsl(var(--foreground));
+  --tw-prose-body: hsl(var(--foreground) / 0.85);
   --tw-prose-headings: hsl(var(--foreground));
   --tw-prose-lead: hsl(var(--muted-foreground));
   --tw-prose-links: hsl(var(--primary));
   --tw-prose-bold: hsl(var(--foreground));
   --tw-prose-counters: hsl(var(--muted-foreground));
-  --tw-prose-bullets: hsl(var(--muted-foreground) / 0.5);
+  --tw-prose-bullets: hsl(var(--primary) / 0.35);
   --tw-prose-hr: hsl(var(--border));
-  --tw-prose-quotes: hsl(var(--foreground));
-  --tw-prose-quote-borders: hsl(var(--border));
+  --tw-prose-quotes: hsl(var(--foreground) / 0.9);
+  --tw-prose-quote-borders: hsl(var(--primary) / 0.25);
   --tw-prose-captions: hsl(var(--muted-foreground));
   --tw-prose-code: hsl(var(--foreground));
   --tw-prose-pre-code: inherit;
@@ -66,16 +69,16 @@
 }
 
 .dark .prose {
-  --tw-prose-body: hsl(var(--foreground));
+  --tw-prose-body: hsl(var(--foreground) / 0.8);
   --tw-prose-headings: hsl(var(--foreground));
   --tw-prose-lead: hsl(var(--muted-foreground));
   --tw-prose-links: hsl(var(--primary));
   --tw-prose-bold: hsl(var(--foreground));
   --tw-prose-counters: hsl(var(--muted-foreground));
-  --tw-prose-bullets: hsl(var(--muted-foreground) / 0.5);
+  --tw-prose-bullets: hsl(var(--primary) / 0.35);
   --tw-prose-hr: hsl(var(--border));
-  --tw-prose-quotes: hsl(var(--foreground));
-  --tw-prose-quote-borders: hsl(var(--border));
+  --tw-prose-quotes: hsl(var(--foreground) / 0.9);
+  --tw-prose-quote-borders: hsl(var(--primary) / 0.25);
   --tw-prose-captions: hsl(var(--muted-foreground));
   --tw-prose-code: hsl(var(--foreground));
   --tw-prose-pre-code: inherit;
@@ -89,76 +92,127 @@
 .prose h3,
 .prose h4 {
   font-family: var(--font-dm-sans), system-ui, sans-serif;
-  scroll-margin-top: 5rem;
+  scroll-margin-top: 7.5rem;
 }
 
 .prose h1 {
-  font-size: 2.5rem;
+  font-size: 2rem;
   font-weight: 700;
-  letter-spacing: -0.035em;
-  line-height: 1.1;
+  letter-spacing: -0.04em;
+  line-height: 1.15;
+  margin-bottom: 0.5em;
 }
 
 .prose h2 {
-  font-size: 1.5rem;
+  font-size: 1.35rem;
   font-weight: 600;
-  letter-spacing: -0.02em;
-  margin-top: 2.5rem;
-  padding-bottom: 0.5rem;
-  border-bottom: 1px solid hsl(var(--border));
+  letter-spacing: -0.025em;
+  margin-top: 3rem;
+  padding-bottom: 0.6rem;
+  border-bottom: none;
+  position: relative;
+}
+
+.prose h2::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 2rem;
+  height: 2px;
+  background: hsl(var(--primary) / 0.5);
+  border-radius: 1px;
 }
 
 .prose h3 {
-  font-size: 1.2rem;
+  font-size: 1.1rem;
   font-weight: 600;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.015em;
   margin-top: 2rem;
+  color: hsl(var(--foreground) / 0.9);
 }
 
 .prose p {
-  line-height: 1.75;
+  line-height: 1.8;
+  letter-spacing: 0.005em;
 }
 
 .prose li {
-  line-height: 1.7;
+  line-height: 1.75;
+}
+
+.prose strong {
+  font-weight: 600;
 }
 
 .prose a {
   font-weight: 500;
-  text-underline-offset: 3px;
-  text-decoration-thickness: 1px;
-  transition: color 0.15s, text-decoration-color 0.15s;
+  text-decoration: none;
+  border-bottom: 1px solid hsl(var(--primary) / 0.3);
+  transition: border-color 0.2s ease, color 0.2s ease;
 }
 
 .prose a:hover {
-  text-decoration-thickness: 2px;
+  border-bottom-color: hsl(var(--primary));
 }
 
 .prose table {
   font-size: 0.875rem;
+  border-collapse: separate;
+  border-spacing: 0;
+  width: 100%;
+  border-radius: 0.75rem;
+  overflow: hidden;
+  border: 1px solid hsl(var(--border));
+}
+
+.prose thead {
+  background: hsl(var(--surface));
 }
 
 .prose th {
   font-weight: 600;
   font-size: 0.8125rem;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+  border-bottom: 1px solid hsl(var(--border));
+}
+
+.prose td {
+  border-bottom: 1px solid hsl(var(--border) / 0.5);
+}
+
+.prose tbody tr:last-child td {
+  border-bottom: none;
 }
 
 .prose blockquote {
-  font-style: italic;
-  border-left-width: 3px;
+  font-style: normal;
+  border-left-width: 2px;
   border-color: hsl(var(--primary) / 0.3);
+  background: hsl(var(--surface) / 0.5);
+  border-radius: 0 0.75rem 0.75rem 0;
+  padding: 1rem 1.25rem;
 }
 
-/* ── Inline code ─────────────────────────────────── */
+.prose hr {
+  border: none;
+  height: 1px;
+  background: linear-gradient(to right, hsl(var(--border)), transparent);
+  margin: 2.5rem 0;
+}
+
+/* ── Inline code ──────────────────────────────────── */
 
 .prose :where(code):not(:where(pre *)):not([data-rehype-pretty-code-figure] code) {
   font-family: var(--font-jetbrains-mono), monospace;
-  font-size: 0.85em;
+  font-size: 0.825em;
   font-weight: 500;
-  padding: 0.2em 0.4em;
+  padding: 0.15em 0.4em;
   border-radius: 0.375rem;
   background: hsl(var(--muted));
+  border: 1px solid hsl(var(--border) / 0.5);
 }
 
 .prose :where(code):not(:where(pre *))::before,
@@ -166,7 +220,7 @@
   content: none;
 }
 
-/* ── Inline code via rehype-pretty-code (FIX) ────── */
+/* ── Inline code (rehype-pretty-code) ─────────────── */
 
 [data-rehype-pretty-code-figure]:not(:has(pre)) {
   display: inline !important;
@@ -176,36 +230,33 @@
 [data-rehype-pretty-code-figure]:not(:has(pre)) > code {
   display: inline !important;
   font-family: var(--font-jetbrains-mono), monospace;
-  font-size: 0.85em;
+  font-size: 0.825em;
   font-weight: 500;
-  padding: 0.15em 0.35em;
+  padding: 0.15em 0.4em;
   border-radius: 0.375rem;
   background: hsl(var(--muted)) !important;
+  border: 1px solid hsl(var(--border) / 0.5);
 }
 
 [data-rehype-pretty-code-figure]:not(:has(pre)) > code span {
   background: transparent !important;
 }
 
-/* ── Code blocks (rehype-pretty-code) ────────────── */
+/* ── Code blocks ──────────────────────────────────── */
 
 [data-rehype-pretty-code-figure]:has(pre) {
-  margin: 1.5em 0;
+  margin: 1.75em 0;
 }
 
 [data-rehype-pretty-code-figure] pre {
-  border-radius: 0.75rem;
-  padding: 1rem 1.25rem;
-  font-size: 0.875rem;
-  line-height: 1.7;
+  border-radius: 0.875rem;
+  padding: 1.125rem 1.375rem;
+  font-size: 0.8125rem;
+  line-height: 1.75;
   border: 1px solid hsl(var(--border));
-  border-left: 3px solid hsl(var(--primary) / 0.3);
   overflow-x: auto;
-  background: hsl(30 20% 97%) !important;
-}
-
-.dark [data-rehype-pretty-code-figure] pre {
-  background: hsl(20 10% 7%) !important;
+  background: hsl(var(--surface)) !important;
+  position: relative;
 }
 
 [data-rehype-pretty-code-figure] pre,
@@ -219,9 +270,9 @@
 
 [data-rehype-pretty-code-figure] [data-line] {
   padding: 0 0.5rem;
+  border-left: 2px solid transparent;
 }
 
-/* Dual-theme switching */
 [data-rehype-pretty-code-figure] code[data-theme*=" "],
 [data-rehype-pretty-code-figure] code[data-theme*=" "] span {
   color: var(--shiki-light);
@@ -234,11 +285,11 @@
   background-color: var(--shiki-dark-bg);
 }
 
-/* ── Scrollbar ───────────────────────────────────── */
+/* ── Scrollbar ────────────────────────────────────── */
 
 ::-webkit-scrollbar {
-  width: 5px;
-  height: 5px;
+  width: 4px;
+  height: 4px;
 }
 
 ::-webkit-scrollbar-track {
@@ -246,23 +297,34 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: hsl(var(--muted-foreground) / 0.15);
-  border-radius: 3px;
+  background: hsl(var(--muted-foreground) / 0.12);
+  border-radius: 2px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--muted-foreground) / 0.3);
+  background: hsl(var(--muted-foreground) / 0.25);
 }
 
-/* ── Selection ───────────────────────────────────── */
+/* ── Selection ────────────────────────────────────── */
 
 ::selection {
-  background: hsl(var(--primary) / 0.15);
+  background: hsl(var(--primary) / 0.12);
+  color: hsl(var(--foreground));
 }
 
-/* ── Transitions ─────────────────────────────────── */
+/* ── Transitions ──────────────────────────────────── */
 
-a,
-button {
-  transition: color 0.15s, background-color 0.15s, border-color 0.15s, box-shadow 0.15s;
+a, button {
+  transition: color 0.2s ease, background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+}
+
+/* ── Animate in ───────────────────────────────────── */
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-up {
+  animation: fade-up 0.5s ease-out both;
 }

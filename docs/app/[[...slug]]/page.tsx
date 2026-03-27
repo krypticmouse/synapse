@@ -69,8 +69,8 @@ export default async function Page(props: {
 
   return (
     <div className="flex">
-      <article className="flex-1 min-w-0 py-10 px-6 sm:px-8 lg:px-12">
-        <div className="prose prose-neutral dark:prose-invert max-w-none">
+      <article className="flex-1 min-w-0 py-10 px-6 sm:px-8 lg:px-14">
+        <div className="prose prose-neutral dark:prose-invert max-w-3xl animate-fade-up">
           {page.content}
         </div>
       </article>
