@@ -24,6 +24,10 @@ export const metadata: Metadata = {
     default: 'Synapse Documentation',
   },
   description: SITE_DESCRIPTION,
+  icons: {
+    icon: '/logo.png',
+    apple: '/logo.png',
+  },
   openGraph: {
     type: 'website',
     siteName: 'Synapse',
