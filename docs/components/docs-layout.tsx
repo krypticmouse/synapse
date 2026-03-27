@@ -7,6 +7,7 @@ import { useTheme } from 'next-themes'
 import { tabs, type HeaderTab } from '@/lib/navigation'
 import { cn } from '@/lib/utils'
 import { GitHubHeaderLink } from '@/components/github-header-link'
+import { SearchButton } from '@/components/search'
 
 function getActiveTab(pathname: string): HeaderTab | undefined {
   if (pathname === '/') return tabs.find((t) => t.prefix === '/')
@@ -49,7 +50,20 @@ export function DocsLayout({ children }: { children: React.ReactNode }) {
 
             <div className="flex-1" />
 
-            <nav className="flex items-center gap-2">
+            <div className="hidden sm:block w-full max-w-[16rem] md:max-w-[20rem]">
+              <SearchButton />
+            </div>
+            <button
+              onClick={() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true })) }}
+              className="inline-flex sm:hidden items-center justify-center rounded-lg w-8 h-8 text-muted-foreground hover:text-foreground"
+              aria-label="Search"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" />
+              </svg>
+            </button>
+
+            <nav className="flex shrink-0 items-center gap-2">
               <GitHubHeaderLink />
               <ThemeToggle />
             </nav>
